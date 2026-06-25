@@ -58,11 +58,14 @@ port_open "$WEB_PORT" && echo "✓ Web UI is up." || echo "… Web UI still star
 
 # --- how to reach it / manage it -------------------------------------------
 echo
+# RUNPOD_POD_ID isn't always exported into the shell; fall back to PID 1's env.
+POD_ID="${RUNPOD_POD_ID:-}"
+[ -z "$POD_ID" ] && POD_ID="$(tr '\0' '\n' < /proc/1/environ 2>/dev/null | sed -n 's/^RUNPOD_POD_ID=//p')"
 echo "──────────────────────────────────────────────────────────────"
-if [ -n "${RUNPOD_POD_ID:-}" ]; then
-  echo "  Open:  https://${RUNPOD_POD_ID}-${WEB_PORT}.proxy.runpod.net"
+if [ -n "$POD_ID" ]; then
+  echo "  Open:  https://${POD_ID}-${WEB_PORT}.proxy.runpod.net"
 else
-  echo "  Open:  https://<POD_ID>-${WEB_PORT}.proxy.runpod.net   (\$RUNPOD_POD_ID was empty)"
+  echo "  Open:  https://<POD_ID>-${WEB_PORT}.proxy.runpod.net   (set POD_ID from the RunPod Connect panel)"
 fi
 echo "  Tunnel alt: ssh -L ${WEB_PORT}:localhost:${WEB_PORT} <ssh-to-pod>  then http://localhost:${WEB_PORT}"
 echo "  Logs:  tmux attach -t server   |   tmux attach -t webapp   (detach: Ctrl-b d)"
