@@ -90,6 +90,7 @@ class RolloutWorker(threading.Thread):
         self._reset_to = None  # (suite, task_id, init_id) requested reset
         self._reset_instruction = ""  # custom prompt to start the next rollout with
         self._clear_plan = False  # force a replan now (e.g. after an instruction change)
+        self._dbg_last_prompt = None  # log the prompt sent to the policy whenever it changes
 
         # Status (guarded by _lock).
         self.status = {
@@ -330,6 +331,10 @@ class RolloutWorker(threading.Thread):
                 ),
                 "prompt": str(instruction),
             }
+            if str(instruction) != self._dbg_last_prompt:
+                logger.info("POLICY PROMPT -> %r (canonical goal is %r)",
+                            str(instruction), self.status.get("task_language"))
+                self._dbg_last_prompt = str(instruction)
             action_chunk = self.client.infer(element)["actions"]
             action_plan.extend(action_chunk[: self.args.replan_steps])
 
