@@ -378,6 +378,23 @@ def build_app(worker, args):
     def frame():
         return Response(worker.latest_jpeg(), mimetype="image/jpeg")
 
+    @app.route("/stream.mjpg")
+    def stream():
+        # MJPEG multipart stream over one persistent connection: frame rate is
+        # bandwidth-bound, not per-request-latency bound (matters a lot when the
+        # client is far from the pod / behind a reverse proxy). The browser renders
+        # multipart/x-mixed-replace natively in an <img>.
+        def gen():
+            last = None
+            while True:
+                jpg = worker.latest_jpeg()
+                if jpg is not last:  # only push when the frame actually changes
+                    last = jpg
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                           + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                time.sleep(0.04)  # cap ~25 fps
+        return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
     @app.route("/status")
     def status():
         return jsonify(worker.snapshot_status())
@@ -458,15 +475,21 @@ INDEX_HTML = """
 </div></div>
 <script>
 const $=id=>document.getElementById(id);
-// Chain each frame fetch off the previous load: polling faster than a frame can
-// load (e.g. through a high-latency reverse proxy) aborts the in-flight request,
-// so the <img> rarely renders. onload-chaining fetches the next frame only once
-// the current one has fully loaded -> smooth updates at whatever fps the link allows.
+// Primary: MJPEG stream (one connection, bandwidth-bound, smooth even over a
+// distant/proxied link). Fallback: if the stream fails to start within a couple
+// seconds (e.g. a proxy that buffers multipart), switch to onload-chained polling
+// of /frame.jpg (each fetch waits for the previous to finish, so no aborted loads).
 const view=$('view');
-function nextFrame(){ view.src='/frame.jpg?t='+Date.now(); }
-view.onload=()=>setTimeout(nextFrame,20);
-view.onerror=()=>setTimeout(nextFrame,150);
-nextFrame();
+let streaming=false;
+function pollFrame(){ view.src='/frame.jpg?t='+Date.now(); }
+function startPolling(){ view.onload=()=>setTimeout(pollFrame,20); view.onerror=()=>setTimeout(pollFrame,150); pollFrame(); }
+function startStream(){
+ view.onload=()=>{ streaming=true; };
+ view.onerror=()=>{ if(!streaming) startPolling(); };
+ view.src='/stream.mjpg';
+ setTimeout(()=>{ if(!streaming) startPolling(); }, 2500);
+}
+startStream();
 async function loadTasks(){
  const s=$('suite').value;
  const r=await fetch('/tasks?suite='+s); const j=await r.json();
