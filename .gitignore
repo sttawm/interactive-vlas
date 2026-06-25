@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# ML data & large artifacts
+data/
+datasets/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+wandb/
+
+# Keep experiment tracking + charts, ignore raw checkpoint binaries
+results/checkpoints/**/*.bin
+results/checkpoints/**/*.pt
+results/checkpoints/**/*.pth
+results/checkpoints/**/*.safetensors
