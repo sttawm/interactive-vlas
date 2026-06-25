@@ -15,3 +15,5 @@ When running remotely, those checkpoints should always be pulled locally. Ideall
 When running on a remote server like runpod, frequently ping to check the status of the experiment in case it failed, and when it fails, try to fix it and take necessary steps to continue.
 
 Running on the remote pod should always happen via github syncs and scripts to make sure we're not relying on scp'ing commands.
+
+If running locally, always use some sort of virtual environment, whether 'uv' or 'venv' or 'conda' or similar. Choose whichever is appropriate.

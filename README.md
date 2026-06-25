@@ -14,7 +14,13 @@ Each VLA+env pairing is a self-contained instance with its own `setup.sh`, `run.
 | Instance | Policy | Environment | Status |
 |----------|--------|-------------|--------|
 | [`pi05_libero/`](pi05_libero/) | π0.5 (OpenPI) | LIBERO | ✅ working |
-| `molmo/` | MolmoAct | MolmoSpaces | 🚧 planned (reference repos staged) |
+| [`molmobot_molmospaces/`](molmobot_molmospaces/) | MolmoBot | MolmoSpaces (MuJoCo) | 🚧 rig validated (CPU); GPU run pending |
+| [`molmoact2_maniskill/`](molmoact2_maniskill/) | MolmoAct2 | ManiSkill | 🗓️ planned |
+| [`molmoact2_molmospaces/`](molmoact2_molmospaces/) | MolmoAct2 | MolmoSpaces (MuJoCo) | 🗓️ planned |
+
+Code shared across the Molmo instances lives in [`molmo_shared/`](molmo_shared/). The
+upstream reference repos (MolmoSpaces, MolmoBot, MolmoAct2) are cloned under `molmo/`,
+which is gitignored — they are not vendored.
 
 To get started, `cd` into an instance folder and follow its README, e.g.:
 
