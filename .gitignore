@@ -35,10 +35,14 @@ results/checkpoints/**/*.pt
 results/checkpoints/**/*.pth
 results/checkpoints/**/*.safetensors
 
-# Upstream OpenPI clone (reference only; real install lives on the GPU pod)
+# Upstream reference clones (not vendored; real installs live on the GPU pod)
 openpi-ref/
+molmo/
+
+# Machine-specific paths written by each instance's setup.sh
+**/.openpi_env
 
 # Rollout artifacts: keep instructions.txt + metadata.json, drop heavy media
-runs/**/*.mp4
-runs/**/*.npy
-runs/**/*.npz
+**/runs/**/*.mp4
+**/runs/**/*.npy
+**/runs/**/*.npz

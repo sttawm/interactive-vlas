@@ -16,8 +16,9 @@ set -euo pipefail
 OPENPI_DIR="${OPENPI_DIR:-/workspace/openpi}"
 OPENPI_COMMIT="${OPENPI_COMMIT:-15a9616}"   # pinned for reproducibility
 UV_CACHE_DIR="${UV_CACHE_DIR:-/workspace/.uv-cache}"   # keep wheels off the small root disk
+OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/workspace/.cache/openpi}"  # checkpoint cache on persistent volume
 PREFETCH_CHECKPOINT="${PREFETCH_CHECKPOINT:-1}"        # download pi05_libero now (set 0 to skip)
-export UV_CACHE_DIR
+export UV_CACHE_DIR OPENPI_DATA_HOME
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CYAN='\033[36m'; NC='\033[0m'
@@ -96,6 +97,7 @@ LIBERO_VENV=$LV
 LIBERO_PYTHONPATH=$OPENPI_DIR/third_party/libero
 OPENPI_COMMIT=$(git -C "$OPENPI_DIR" rev-parse --short HEAD)
 UV_CACHE_DIR=$UV_CACHE_DIR
+OPENPI_DATA_HOME=$OPENPI_DATA_HOME
 EOF
 
 echo -e "\n${CYAN}Setup complete.${NC} Start it with:  ./run.sh"

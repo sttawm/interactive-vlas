@@ -18,6 +18,9 @@ export UV_CACHE_DIR
 export OPENPI_COMMIT
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+# Cache the (12GB) checkpoint on the persistent volume so it survives pod
+# restarts instead of re-downloading to the ephemeral container disk.
+export OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/workspace/.cache/openpi}"
 # LIBERO is a namespace package with no top-level __init__.py; expose it on PYTHONPATH.
 export PYTHONPATH="${LIBERO_PYTHONPATH}${PYTHONPATH:+:$PYTHONPATH}"
 
