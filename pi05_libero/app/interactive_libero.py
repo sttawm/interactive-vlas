@@ -166,6 +166,12 @@ class RolloutWorker(threading.Thread):
             bddl_file_name=str(bddl),
             camera_heights=LIBERO_ENV_RESOLUTION,
             camera_widths=LIBERO_ENV_RESOLUTION,
+            # Interactive rollouts are open-ended, but robosuite terminates the
+            # episode at horizon=1000 (then any further step() raises "executing
+            # action in terminated episode"). ignore_done lets it run forever;
+            # task success still comes from LIBERO's _check_success(), unaffected.
+            ignore_done=True,
+            horizon=10_000_000,
         )
         env.seed(self.args.seed)
         init_states = task_suite.get_task_init_states(task_id)
