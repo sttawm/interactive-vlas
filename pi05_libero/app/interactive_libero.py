@@ -88,7 +88,6 @@ class RolloutWorker(threading.Thread):
         self._latest_jpeg = _placeholder_jpeg("starting...")
         self._paused = True  # start paused until the user picks a task / hits go
         self._reset_to = None  # (suite, task_id, init_id) requested reset
-        self._reset_instruction = ""  # custom prompt to start the next rollout with
         self._clear_plan = False  # force a replan now (e.g. after an instruction change)
         self._dbg_last_prompt = None  # log the prompt sent to the policy whenever it changes
 
@@ -136,11 +135,21 @@ class RolloutWorker(threading.Thread):
     def request_reset(self, suite, task_id, init_id, instruction=""):
         # Land paused & ready: the env loads and shows its first frame, but the
         # rollout doesn't step until the user presses Play.
+        instruction = (instruction or "").strip()
+        # Resolve the canonical goal now (cheap — task metadata, no env) and set the
+        # prompt synchronously. Otherwise a Send arriving during the ~15s env load
+        # would be clobbered when the slow reset path finally assigns the prompt.
+        canonical = ""
+        try:
+            canonical = str(self._benchmark_dict[suite]().get_task(int(task_id)).language)
+        except Exception:
+            logger.exception("Could not resolve canonical goal for %s task %s", suite, task_id)
         with self._lock:
             self._reset_to = (suite, int(task_id), int(init_id))
-            self._reset_instruction = (instruction or "").strip()
+            self._instruction = instruction or canonical
             self._paused = True
             self.status["paused"] = True
+            self.status["instruction"] = self._instruction
 
     def set_paused(self, paused):
         with self._lock:
@@ -246,9 +255,6 @@ class RolloutWorker(threading.Thread):
                 self._clear_plan = False
 
             if reset_to is not None:
-                with self._lock:
-                    reset_instruction = self._reset_instruction
-                    self._reset_instruction = ""
                 suite, task_id, init_id = reset_to
                 if env is not None:
                     try:
@@ -263,9 +269,9 @@ class RolloutWorker(threading.Thread):
                 action_plan.clear()
                 step = 0
                 self._start_new_run(suite, task_id, task_language)
-                # Use the typed custom prompt if given; otherwise the canonical task language.
+                # The prompt was set synchronously in request_reset (so a Send during
+                # this slow env load isn't clobbered) — don't reassign it here.
                 with self._lock:
-                    self._instruction = reset_instruction or str(task_language)
                     self.status.update(
                         suite=suite,
                         task_id=task_id,
