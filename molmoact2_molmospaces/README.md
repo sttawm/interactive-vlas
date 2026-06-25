@@ -18,5 +18,6 @@ returned action chunk — then reuse the same interactive web wrapper as
 Reference repos (gitignored clones): `../molmo/molmoact2/examples/droid/host_server_droid.py`,
 `../molmo/molmospaces/molmo_spaces/evaluation/README.md` ("Implementing Eval in an External Repo").
 
-Not started yet — `molmobot_molmospaces/` first, then this reuses its web/sim glue from
-[`molmo_shared/`](../molmo_shared/).
+Not started yet — `molmobot_molmospaces/` first, then this reuses the shared web UI
+[`shared/webui.py`](../shared/) (just add `MolmoAct2` to the VLA selector and a `/act` client
+backend).

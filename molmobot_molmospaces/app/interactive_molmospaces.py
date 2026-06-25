@@ -42,7 +42,6 @@ if sys.platform == "linux":
 import cv2
 import imageio
 import numpy as np
-from flask import Flask, Response, jsonify, render_template_string, request
 
 import mujoco
 from mujoco import MjData, MjModel, MjSpec
@@ -57,6 +56,13 @@ from molmo_spaces.utils.lazy_loading_utils import (
     install_uid,
 )
 
+# Shared web UI (one page reused by every VLA+env instance). Repo root is three
+# levels up: molmobot_molmospaces/app/<this file>.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from shared.webui import build_app  # noqa: E402
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("interactive_molmospaces")
 
@@ -64,6 +70,22 @@ logger = logging.getLogger("interactive_molmospaces")
 DEFAULT_POLICY_DT_MS = 66
 CAM_EXO = "robot_0/exo_camera_1"
 CAM_WRIST = "robot_0/gripper/wrist_camera"
+ENV_NAME = "MolmoSpaces (ProcTHOR)"
+
+
+def molmobot_available():
+    import importlib.util
+    return importlib.util.find_spec("olmo") is not None
+
+
+def _house_from_scene(scene, default):
+    """Parse a scene label like 'house 3' -> 3."""
+    if not scene:
+        return default
+    try:
+        return int(str(scene).strip().split()[-1])
+    except (ValueError, IndexError):
+        return default
 
 
 # --------------------------------------------------------------------------- #
@@ -228,29 +250,32 @@ class SimWorld:
 # Rollout worker
 # --------------------------------------------------------------------------- #
 class RolloutWorker(threading.Thread):
-    def __init__(self, args, policy_factory):
+    def __init__(self, args, available_vlas):
         super().__init__(daemon=True)
         self.args = args
-        self._policy_factory = policy_factory  # (view) -> policy ; called after scene build
+        self.available_vlas = available_vlas
+        self._default_vla = available_vlas[0]
+        self._real_policy = None  # cached MolmoBot policy (loaded once, reused)
         self._policy = None
+        self._cur_vla = self._default_vla
 
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
         self._instruction = args.instruction or ""
-        self._latest_jpeg = _placeholder_jpeg("starting... load a scene")
+        self._latest_jpeg = _placeholder_jpeg("pick a VLA + scene, then Load")
         self._paused = True
-        self._reset_to = args.house_index  # request an initial build
+        self._reset_to = {"vla": self._default_vla, "house_index": args.house_index}
         self._force_refresh = False
 
         self.status = {
-            "house_index": args.house_index,
-            "split": args.split,
+            "vla": self._default_vla,
+            "env": ENV_NAME,
+            "house": args.house_index,
             "instruction": self._instruction,
             "step": 0,
             "max_steps": args.max_steps,
             "paused": True,
-            "policy": "(loading)",
             "ready": False,
         }
 
@@ -275,11 +300,37 @@ class RolloutWorker(threading.Thread):
         )
         logger.info("New instruction @step %s: %r", step, text)
 
-    def request_reset(self, house_index):
+    def config(self):
+        scenes = [f"house {i}" for i in range(self.args.num_scenes)]
+        return {
+            "title": "Interactive VLA Playground · MolmoBot + MolmoSpaces",
+            "vlas": self.available_vlas,
+            "envs": [ENV_NAME],
+            "scenes": {ENV_NAME: scenes},
+            "default": {
+                "vla": self._default_vla,
+                "env": ENV_NAME,
+                "scene": f"house {self.args.house_index}",
+            },
+        }
+
+    def request_reset(self, selection):
+        vla = selection.get("vla") or self._cur_vla
+        if vla not in self.available_vlas:
+            vla = self._default_vla
+        house = _house_from_scene(selection.get("scene"), self.args.house_index)
         with self._lock:
-            self._reset_to = int(house_index)
+            self._reset_to = {"vla": vla, "house_index": house}
             self._paused = False
             self.status["paused"] = False
+
+    def _make_policy(self, vla, view):
+        if vla == "stub":
+            return StubPolicy(view)
+        if self._real_policy is None:
+            logger.info("Loading MolmoBot policy (first load may take a minute)...")
+            self._real_policy = load_real_policy(self.args.checkpoint, self.args.action_type)
+        return self._real_policy
 
     def set_paused(self, paused):
         with self._lock:
@@ -356,25 +407,28 @@ class RolloutWorker(threading.Thread):
                 self._force_refresh = False
 
             if reset_to is not None:
+                vla = reset_to["vla"]
+                house_index = reset_to["house_index"]
                 self._finalize_run()
-                logger.info("Building scene for house %s (%s split)...", reset_to, self.args.split)
+                logger.info("Building house %s (%s) for VLA=%s ...", house_index, self.args.split, vla)
                 with self._lock:
-                    self.status.update(ready=False, step=0)
+                    self.status.update(ready=False, step=0, vla=vla, house=house_index)
                 try:
-                    world = SimWorld(reset_to, self.args.split, add_bowl=self.args.add_bowl)
+                    world = SimWorld(house_index, self.args.split, add_bowl=self.args.add_bowl)
                 except Exception:
                     logger.exception("Scene build failed")
                     self._latest_jpeg = _placeholder_jpeg("scene build failed (see log)")
                     world = None
                     self.set_paused(True)
                     continue
-                if self._policy is None:
-                    logger.info("Loading policy...")
-                    self._policy = self._policy_factory(world.view)
-                    with self._lock:
-                        self.status["policy"] = self._policy.name
-                elif isinstance(self._policy, StubPolicy):
-                    self._policy._view = world.view  # rebind stub to the new scene
+                try:
+                    self._policy = self._make_policy(vla, world.view)
+                except Exception:
+                    logger.exception("Policy load failed")
+                    self._latest_jpeg = _placeholder_jpeg(f"failed to load VLA '{vla}' (see log)")
+                    self.set_paused(True)
+                    continue
+                self._cur_vla = vla
                 if hasattr(self._policy, "reset"):
                     try:
                         self._policy.reset()
@@ -386,7 +440,7 @@ class RolloutWorker(threading.Thread):
                     if not self._instruction:
                         self._instruction = "pick up an object"
                     self.status.update(
-                        house_index=world.house_index, instruction=self._instruction,
+                        vla=vla, house=world.house_index, instruction=self._instruction,
                         step=0, ready=True,
                     )
                 self._record_instructions.append(
@@ -470,140 +524,6 @@ def _placeholder_jpeg(text):
     return buf.tobytes()
 
 
-# --------------------------------------------------------------------------- #
-# Flask app
-# --------------------------------------------------------------------------- #
-def build_app(worker, args):
-    app = Flask(__name__)
-
-    @app.route("/")
-    def index():
-        return render_template_string(INDEX_HTML)
-
-    @app.route("/frame.jpg")
-    def frame():
-        return Response(worker.latest_jpeg(), mimetype="image/jpeg")
-
-    @app.route("/stream.mjpg")
-    def stream():
-        def gen():
-            last = None
-            while True:
-                jpg = worker.latest_jpeg()
-                if jpg is not last:
-                    last = jpg
-                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
-                           + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
-                time.sleep(0.04)
-        return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    @app.route("/status")
-    def status():
-        return jsonify(worker.snapshot_status())
-
-    @app.route("/instruction", methods=["POST"])
-    def instruction():
-        worker.set_instruction((request.json or {}).get("text", ""))
-        return jsonify(ok=True)
-
-    @app.route("/reset", methods=["POST"])
-    def reset():
-        body = request.json or {}
-        worker.request_reset(body.get("house_index", args.house_index))
-        return jsonify(ok=True)
-
-    @app.route("/pause", methods=["POST"])
-    def pause():
-        worker.set_paused((request.json or {}).get("paused", True))
-        return jsonify(ok=True)
-
-    return app
-
-
-INDEX_HTML = """
-<!doctype html><html><head><meta charset="utf-8"><title>Interactive MolmoSpaces · MolmoBot</title>
-<style>
- body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#111;color:#eee;margin:0;padding:20px}
- .wrap{max-width:1180px;margin:0 auto}
- h1{font-size:18px;font-weight:600}
- .row{display:flex;gap:20px;flex-wrap:wrap}
- #view{width:1024px;max-width:100%;background:#000;border:1px solid #333;border-radius:8px}
- .panel{flex:1;min-width:300px}
- input,select,button,textarea{font-size:14px;padding:8px;border-radius:6px;border:1px solid #444;background:#1c1c1c;color:#eee}
- input[type=text],input[type=number]{width:100%}
- button{background:#2d6cdf;border:none;cursor:pointer}
- button.alt{background:#444}
- .status{font-family:monospace;font-size:13px;background:#000;padding:10px;border-radius:6px;white-space:pre-wrap;line-height:1.5}
- label{font-size:12px;color:#aaa;display:block;margin:10px 0 4px}
- .hint{color:#888;font-size:12px;margin-top:4px}
-</style></head><body><div class="wrap">
-<h1>Interactive MolmoSpaces · MolmoBot <span style="color:#888;font-weight:400">(left: exo cam · right: wrist cam)</span></h1>
-<img id="view" src="/frame.jpg">
-<div class="row" style="margin-top:14px">
- <div class="panel">
-  <label>Scene (ProcTHOR-10k house index)</label>
-  <div class="row" style="gap:8px">
-   <input type="number" id="house" value="0" min="0" style="flex:1">
-   <button id="load" style="flex:2">Load scene &amp; start</button>
-  </div>
-  <div class="hint">House 0 is the demo kitchen (with a bowl). Other indices load different houses.</div>
-
-  <label>Instruction (type anything; objects must exist in the scene)</label>
-  <input type="text" id="instr" placeholder="e.g. put the salt shaker in the bowl">
-  <div class="row" style="gap:8px;margin-top:8px">
-   <button id="send" style="flex:2">Send instruction</button>
-   <button id="pause" class="alt" style="flex:1">Pause</button>
-   <button id="reset" class="alt" style="flex:1">Reset</button>
-  </div>
-  <div class="hint">A new instruction forces an immediate replan — use it for corrections or staged subgoals.</div>
- </div>
- <div class="panel">
-  <label>Status</label>
-  <div class="status" id="status">idle</div>
- </div>
-</div></div>
-<script>
-const $=id=>document.getElementById(id);
-const view=$('view');
-let streaming=false;
-function pollFrame(){ view.src='/frame.jpg?t='+Date.now(); }
-function startPolling(){ view.onload=()=>setTimeout(pollFrame,20); view.onerror=()=>setTimeout(pollFrame,150); pollFrame(); }
-function startStream(){
- view.onload=()=>{ streaming=true; };
- view.onerror=()=>{ if(!streaming) startPolling(); };
- view.src='/stream.mjpg';
- setTimeout(()=>{ if(!streaming) startPolling(); }, 2500);
-}
-startStream();
-$('load').onclick=async()=>{
- await fetch('/reset',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({house_index:parseInt($('house').value)||0})});
-};
-$('send').onclick=async()=>{
- await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({text:$('instr').value})});
-};
-$('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
-let paused=false;
-$('pause').onclick=async()=>{ paused=!paused;
- await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})});
- $('pause').textContent=paused?'Resume':'Pause';
-};
-$('reset').onclick=()=>$('load').click();
-async function poll(){
- try{ const r=await fetch('/status'); const s=await r.json();
-  $('status').textContent=
-   `policy:   ${s.policy}\nhouse:    ${s.house_index}  (${s.split})\n`+
-   `prompt:   ${s.instruction}\nstep:     ${s.step} / ${s.max_steps}\n`+
-   `paused:   ${s.paused}\nready:    ${s.ready}`;
- }catch(e){}
- setTimeout(poll,400);
-}
-poll();
-</script></body></html>
-"""
-
-
 def main():
     p = argparse.ArgumentParser(description="Interactive MolmoSpaces runner for MolmoBot")
     p.add_argument("--web-port", type=int, default=8888, help="web UI port")
@@ -611,28 +531,31 @@ def main():
     p.add_argument("--split", default="val", help="house split (val/train/test)")
     p.add_argument("--instruction", default="", help="initial instruction")
     p.add_argument("--max-steps", type=int, default=600, help="policy steps before auto-pause")
+    p.add_argument("--num-scenes", type=int, default=16, help="how many house indices to offer")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--runs-dir", default="runs")
     p.add_argument("--no-bowl", dest="add_bowl", action="store_false",
                    help="don't attach the demo bowl receptacle on house 0")
     # Policy
     p.add_argument("--stub", action="store_true",
-                   help="use the no-model wobble policy (local plumbing test, no GPU)")
+                   help="only offer the no-model wobble policy (local plumbing test, no GPU)")
     p.add_argument("--checkpoint", default="allenai/MolmoBot-DROID",
                    help="HF repo id or local dir for the real policy")
     p.add_argument("--action-type", default="joint_pos",
                    help="MolmoBot-DROID uses absolute joint_pos")
     args = p.parse_args()
 
-    if args.stub:
-        policy_factory = lambda view: StubPolicy(view)  # noqa: E731
-        logger.info("Using STUB policy (no model). Instruction will NOT steer the robot.")
-    else:
-        policy_factory = lambda view: load_real_policy(args.checkpoint, args.action_type)  # noqa: E731
+    # The VLA selector only advertises what this server can actually run: MolmoBot
+    # needs the `olmo` package (and a GPU); `stub` always works. --stub hides MolmoBot.
+    available = []
+    if molmobot_available() and not args.stub:
+        available.append("MolmoBot")
+    available.append("stub")
+    logger.info("Available VLAs: %s", available)
 
-    worker = RolloutWorker(args, policy_factory)
+    worker = RolloutWorker(args, available)
     worker.start()
-    app = build_app(worker, args)
+    app = build_app(worker)
     logger.info("Web UI on :%d", args.web_port)
     app.run(host="0.0.0.0", port=args.web_port, threaded=True)
 

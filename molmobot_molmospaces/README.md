@@ -114,5 +114,9 @@ The single hook is `obs["task"]`, set every policy step from the user-typed stri
 (`RolloutWorker.run` → `SimWorld.obs`). MolmoBot's `RealRobotVLAPolicy` reads `obs["task"]`
 each time it refills its action buffer (every `execute_horizon` steps). To make edits land
 immediately, sending a new instruction also flushes the buffer
-(`RolloutWorker._do_force_refresh`). See [`molmo_shared/`](../molmo_shared/) for the pattern
-shared with the other instances.
+(`RolloutWorker._do_force_refresh`).
+
+The browser page itself (camera stream, instruction box, **VLA·Env·Scene selectors**) is the
+shared [`shared/webui.py`](../shared/) used by every instance; this folder only provides the
+MolmoSpaces sim + MolmoBot policy backend. On a GPU pod the VLA selector lists both `MolmoBot`
+and `stub`; on a CPU box (no `olmo`) only `stub`.
