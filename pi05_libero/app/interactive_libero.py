@@ -91,6 +91,7 @@ class RolloutWorker(threading.Thread):
         self._reset_to = None  # (suite, task_id, init_id) requested reset
         self._clear_plan = False  # force a replan now (e.g. after an instruction change)
         self._dbg_last_prompt = None  # log the prompt sent to the policy whenever it changes
+        self._dbg_was_solved = False  # de-dupe the "goal satisfied" log line
 
         # Status (guarded by _lock).
         self.status = {
@@ -105,6 +106,8 @@ class RolloutWorker(threading.Thread):
             "paused": True,
             "done": False,
             "success": False,
+            "sent_prompt": "",   # exact string fed to the policy on the last inference
+            "sent_step": 0,
             "connected": False,
         }
 
@@ -285,6 +288,8 @@ class RolloutWorker(threading.Thread):
                         done=False,
                         success=False,
                         limit_reached=False,
+                        sent_prompt="",
+                        sent_step=0,
                         connected=True,
                     )
                 self._record_instructions.append(
@@ -298,7 +303,7 @@ class RolloutWorker(threading.Thread):
                 continue
 
             with self._lock:
-                stopped = self.status["done"] or self.status["limit_reached"]
+                stopped = self.status["limit_reached"]  # solving no longer stops; only the step cap does
             if stopped:
                 time.sleep(0.05)
                 continue
@@ -340,10 +345,16 @@ class RolloutWorker(threading.Thread):
                 ),
                 "prompt": str(instruction),
             }
-            if str(instruction) != self._dbg_last_prompt:
+            sent = str(instruction)
+            if sent != self._dbg_last_prompt:
                 logger.info("POLICY PROMPT -> %r (canonical goal is %r)",
-                            str(instruction), self.status.get("task_language"))
-                self._dbg_last_prompt = str(instruction)
+                            sent, self.status.get("task_language"))
+                self._dbg_last_prompt = sent
+            # Record the EXACT string fed to the policy this inference (ground truth
+            # for the UI, captured inside the infer path).
+            with self._lock:
+                self.status["sent_prompt"] = sent
+                self.status["sent_step"] = step + 1
             action_chunk = self.client.infer(element)["actions"]
             action_plan.extend(action_chunk[: self.args.replan_steps])
 
@@ -355,20 +366,22 @@ class RolloutWorker(threading.Thread):
         self._record_prompts.append(str(instruction))
         self._publish_frame(obs, overlay=instruction, step=step + 1)
 
-        reached_limit = not done and (step + 1) >= self.args.max_rollout_steps
+        reached_limit = (step + 1) >= self.args.max_rollout_steps
         with self._lock:
             self.status["step"] = step + 1
-            if done:
-                self.status["done"] = True
-                self.status["success"] = True
-            elif reached_limit:
+            # success is the CURRENT goal-satisfied state (non-terminal) — solving
+            # the task no longer ends the rollout; experiment freely.
+            self.status["success"] = bool(done)
+            if reached_limit:
                 self.status["limit_reached"] = True
                 self.status["paused"] = True
                 self._paused = True
-        if done:
-            logger.info("Task solved at step %s", step + 1)
-            self._finalize_run()
-        elif reached_limit:
+        if done and not self._dbg_was_solved:
+            logger.info("Goal satisfied at step %s (rollout continues)", step + 1)
+            self._dbg_was_solved = True
+        elif not done:
+            self._dbg_was_solved = False
+        if reached_limit:
             logger.info("Reached step limit (%s); stopping rollout", self.args.max_rollout_steps)
             self._finalize_run()
         return obs
@@ -692,17 +705,25 @@ function row(k,v){ return `<div class="srow"><span class="k">${k}</span><span cl
 async function poll(){
  try{ const r=await fetch('/status'); const s=await r.json();
   syncPlay(s.paused); limitReached=s.limit_reached;
+  // Solving no longer ends the episode: 'solved' is a non-terminal indicator.
   const badge = !s.connected ? '<span class="badge load">loading…</span>'
-    : s.success ? '<span class="badge done">solved ✓</span>'
     : s.limit_reached ? `<span class="badge stop">⏹ step limit (${s.step_limit}) — Reset</span>`
     : s.paused ? '<span class="badge pause">⏸ paused</span>'
     : '<span class="badge run">▶ running</span>';
+  const solved = s.success ? ' <span class="badge done">✓ goal met</span>' : '';
+  // "Sent to policy" = ground truth captured inside the inference call.
+  const sent = s.sent_prompt
+    ? `${esc(s.sent_prompt)} <span class="k">(@step ${s.sent_step})</span>`
+    : '<span class="k">— nothing sent yet (press Play) —</span>';
+  const pending = (s.instruction && s.instruction !== s.sent_prompt)
+    ? ' <span class="badge pause">pending — not executed yet</span>' : '';
   $('status').innerHTML =
     row('Task', `${s.task_id} · ${esc(s.suite)}`)
    +row('Scene goal', esc(s.task_language)||'—')
-   +row('Prompt', esc(s.instruction)||'—')
+   +row('Prompt (set)', (esc(s.instruction)||'—')+pending)
+   +row('→ Sent to policy', sent)
    +row('Step', `${s.step} / ${s.step_limit}`)
-   +row('State', badge);
+   +row('State', badge+solved);
  }catch(e){}
  setTimeout(poll,400);
 }
