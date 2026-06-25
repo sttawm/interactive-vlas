@@ -133,6 +133,7 @@ class RolloutWorker(threading.Thread):
         with self._lock:
             self._reset_to = (suite, int(task_id), int(init_id))
             self._paused = False
+            self.status["paused"] = False
 
     def set_paused(self, paused):
         with self._lock:
