@@ -88,6 +88,7 @@ class RolloutWorker(threading.Thread):
         self._latest_jpeg = _placeholder_jpeg("starting...")
         self._paused = True  # start paused until the user picks a task / hits go
         self._reset_to = None  # (suite, task_id, init_id) requested reset
+        self._reset_instruction = ""  # custom prompt to start the next rollout with
         self._clear_plan = False  # force a replan now (e.g. after an instruction change)
 
         # Status (guarded by _lock).
@@ -129,9 +130,10 @@ class RolloutWorker(threading.Thread):
         )
         logger.info("New instruction @step %s: %r", self.status["step"], text)
 
-    def request_reset(self, suite, task_id, init_id):
+    def request_reset(self, suite, task_id, init_id, instruction=""):
         with self._lock:
             self._reset_to = (suite, int(task_id), int(init_id))
+            self._reset_instruction = (instruction or "").strip()
             self._paused = False
             self.status["paused"] = False
 
@@ -233,6 +235,9 @@ class RolloutWorker(threading.Thread):
                 self._clear_plan = False
 
             if reset_to is not None:
+                with self._lock:
+                    reset_instruction = self._reset_instruction
+                    self._reset_instruction = ""
                 suite, task_id, init_id = reset_to
                 if env is not None:
                     try:
@@ -247,10 +252,9 @@ class RolloutWorker(threading.Thread):
                 action_plan.clear()
                 step = 0
                 self._start_new_run(suite, task_id, task_language)
-                # Default the instruction to the canonical task language if empty.
+                # Use the typed custom prompt if given; otherwise the canonical task language.
                 with self._lock:
-                    if not self._instruction:
-                        self._instruction = str(task_language)
+                    self._instruction = reset_instruction or str(task_language)
                     self.status.update(
                         suite=suite,
                         task_id=task_id,
@@ -336,15 +340,18 @@ class RolloutWorker(threading.Thread):
         return obs
 
     def _publish_frame(self, obs, overlay=None, step=None):
-        # Show the model's-eye agentview (rotated to be right-side up), upscaled.
+        # Show the model's-eye agentview (rotated to be right-side up). Kept small
+        # (384px, q70 ~= 12KB) so the MJPEG stream stays smooth over distant links;
+        # the browser upscales it to the 512px view box.
+        DS = 384
         frame = np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])
-        frame = cv2.resize(frame, (512, 512), interpolation=cv2.INTER_NEAREST)
+        frame = cv2.resize(frame, (DS, DS), interpolation=cv2.INTER_LINEAR)
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         if overlay:
             label = overlay if len(overlay) < 60 else overlay[:57] + "..."
-            cv2.rectangle(frame, (0, 0), (512, 28), (0, 0, 0), -1)
-            cv2.putText(frame, label, (6, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            cv2.rectangle(frame, (0, 0), (DS, 24), (0, 0, 0), -1)
+            cv2.putText(frame, label, (6, 17), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1)
+        ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
         if ok:
             with self._lock:
                 self._latest_jpeg = buf.tobytes()
@@ -416,6 +423,7 @@ def build_app(worker, args):
             body.get("suite", args.task_suite_name),
             body.get("task_id", args.task_id),
             body.get("init_id", 0),
+            instruction=body.get("instruction", ""),
         )
         return jsonify(ok=True)
 
@@ -442,14 +450,18 @@ INDEX_HTML = """
  button.alt{background:#444}
  .status{font-family:monospace;font-size:13px;background:#000;padding:10px;border-radius:6px;white-space:pre-wrap;line-height:1.5}
  .ok{color:#3fb950}.bad{color:#888}
- label{font-size:12px;color:#aaa;display:block;margin:10px 0 4px}
+ label{font-size:12px;color:#aaa;display:block;margin:12px 0 4px}
  .hint{color:#888;font-size:12px;margin-top:4px}
+ button:active{transform:scale(0.98)} button:disabled{opacity:0.5;cursor:default}
+ #pause.paused{background:#b5862d}
+ .toast{min-height:18px;font-size:13px;color:#3fb950;margin:10px 0 4px;transition:opacity .25s;opacity:0}
+ .toast.show{opacity:1}
 </style></head><body><div class="wrap">
 <h1>Interactive LIBERO · π0.5</h1>
 <div class="row">
  <img id="view" src="/frame.jpg">
  <div class="panel">
-  <label>Scene (task suite + scene)</label>
+  <label>1 · LIBERO task — picks the scene &amp; objects (its goal is just the default prompt)</label>
   <div class="row" style="gap:8px">
    <select id="suite" style="flex:1">
     <option>libero_10</option><option>libero_goal</option>
@@ -457,20 +469,22 @@ INDEX_HTML = """
    </select>
    <select id="task" style="flex:2"></select>
   </div>
-  <button id="load" style="margin-top:8px;width:100%">Load scene &amp; start</button>
+
+  <label>2 · Instruction sent to π0.5 — leave blank to use the task's own goal</label>
+  <input type="text" id="instr" placeholder="(optional) type your own, e.g. put the bowl on the plate">
   <div class="hint" id="canon"></div>
 
-  <label>Instruction (type anything; objects must exist in the scene)</label>
-  <input type="text" id="instr" placeholder="e.g. put the bowl on the plate">
+  <button id="load" style="margin-top:10px;width:100%">▶ Load scene &amp; start</button>
   <div class="row" style="gap:8px;margin-top:8px">
-   <button id="send" style="flex:2">Send instruction</button>
-   <button id="pause" class="alt" style="flex:1">Pause</button>
-   <button id="reset" class="alt" style="flex:1">Reset scene</button>
+   <button id="send" style="flex:2">Send instruction (replan now)</button>
+   <button id="pause" class="alt" style="flex:1">⏸ Pause</button>
+   <button id="reset" class="alt" style="flex:1">↻ Reset</button>
   </div>
-  <div class="hint">Sending a new instruction mid-rollout triggers an immediate replan — use it for corrections or staged subgoals.</div>
+  <div class="hint">Send a new instruction any time mid-rollout — corrections or staged subgoals. Objects must exist in the loaded scene.</div>
 
+  <div class="toast" id="toast"></div>
   <label>Status</label>
-  <div class="status" id="status">idle</div>
+  <div class="status" id="status">Pick a task and hit “Load scene &amp; start”.</div>
  </div>
 </div></div>
 <script>
@@ -490,35 +504,56 @@ function startStream(){
  setTimeout(()=>{ if(!streaming) startPolling(); }, 2500);
 }
 startStream();
+
+let toastTimer;
+function toast(msg,color){ const t=$('toast'); t.textContent=msg; t.style.color=color||'#3fb950'; t.classList.add('show');
+ clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500); }
+
 async function loadTasks(){
  const s=$('suite').value;
  const r=await fetch('/tasks?suite='+s); const j=await r.json();
- $('task').innerHTML=j.tasks.map(t=>`<option value="${t.task_id}">${t.task_id}: ${t.language}</option>`).join('');
+ $('task').innerHTML=j.tasks.map(t=>`<option value="${t.task_id}">Task ${t.task_id} — ${t.language}</option>`).join('');
  showCanon();
 }
-function showCanon(){ const o=$('task').selectedOptions[0]; $('canon').textContent=o?('canonical: '+o.textContent.replace(/^\\d+:\\s*/,'')):''; }
+function canonGoal(){ const o=$('task').selectedOptions[0]; return o?o.textContent.replace(/^Task \\d+ — /,''):''; }
+function showCanon(){ const g=canonGoal(); $('canon').textContent=g?('default goal (used if box is blank): '+g):''; }
 $('suite').onchange=loadTasks; $('task').onchange=showCanon;
-$('load').onclick=async()=>{
+
+async function doLoad(){
+ const instr=$('instr').value.trim();
+ toast(instr?'Loading scene with your prompt…':'Loading scene (using task default)…','#d8a657');
+ $('load').disabled=true;
  await fetch('/reset',{method:'POST',headers:{'Content-Type':'application/json'},
-   body:JSON.stringify({suite:$('suite').value,task_id:parseInt($('task').value),init_id:0})});
-};
+   body:JSON.stringify({suite:$('suite').value,task_id:parseInt($('task').value),init_id:0,instruction:instr})});
+}
+$('load').onclick=doLoad;
+$('reset').onclick=()=>{ toast('Resetting scene…','#d8a657'); doLoad(); };
+
 $('send').onclick=async()=>{
- const t=$('instr').value;
+ const t=$('instr').value.trim();
+ if(!t){ toast('Type an instruction first.','#e06c75'); return; }
  await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+ toast('Instruction sent ✓');
 };
 $('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
-let paused=false;
-$('pause').onclick=async()=>{ paused=!paused;
- await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})});
- $('pause').textContent=paused?'Resume':'Pause';
+
+let serverPaused=true;
+function syncPause(p){ serverPaused=p; const b=$('pause'); b.textContent=p?'▶ Resume':'⏸ Pause'; b.classList.toggle('paused',p); }
+$('pause').onclick=async()=>{ const np=!serverPaused; syncPause(np);
+ await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:np})});
+ toast(np?'Paused':'Resumed','#d8a657');
 };
-$('reset').onclick=()=>$('load').click();
+
+let wasConnected=false;
 async function poll(){
  try{ const r=await fetch('/status'); const s=await r.json();
+  if(s.connected){ $('load').disabled=false; if(!wasConnected){ toast('Scene loaded ✓'); wasConnected=true; } }
+  syncPause(s.paused);
   $('status').textContent=
-   `suite:    ${s.suite}\nscene:    ${s.task_id}  (${s.task_language})\n`+
-   `prompt:   ${s.instruction}\nstep:     ${s.step} / ${s.max_steps}\n`+
-   `paused:   ${s.paused}\nsolved:   ${s.success}`;
+   `task:    ${s.task_id}  ·  scene goal: ${s.task_language}\n`+
+   `prompt:  ${s.instruction}\n`+
+   `step:    ${s.step}  (runs until solved or you reset; benchmark episodes are ${s.max_steps})\n`+
+   `paused:  ${s.paused}    solved: ${s.success}`;
  }catch(e){}
  setTimeout(poll,400);
 }
