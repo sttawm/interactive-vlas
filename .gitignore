@@ -34,3 +34,11 @@ results/checkpoints/**/*.bin
 results/checkpoints/**/*.pt
 results/checkpoints/**/*.pth
 results/checkpoints/**/*.safetensors
+
+# Upstream OpenPI clone (reference only; real install lives on the GPU pod)
+openpi-ref/
+
+# Rollout artifacts: keep instructions.txt + metadata.json, drop heavy media
+runs/**/*.mp4
+runs/**/*.npy
+runs/**/*.npz
