@@ -211,6 +211,8 @@ class RolloutWorker(threading.Thread):
             logger.info("Saved run: %s (%d frames)", self._run_dir, len(self._record_frames))
         except Exception:  # don't let logging kill the worker
             logger.exception("Failed to finalize run")
+        finally:
+            self._run_dir = None  # guard against finalizing the same run twice
 
     def run(self):
         env = None
