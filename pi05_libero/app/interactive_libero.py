@@ -348,6 +348,8 @@ class RolloutWorker(threading.Thread):
                 self.status["success"] = True
             elif reached_limit:
                 self.status["limit_reached"] = True
+                self.status["paused"] = True
+                self._paused = True
         if done:
             logger.info("Task solved at step %s", step + 1)
             self._finalize_run()
