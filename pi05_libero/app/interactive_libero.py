@@ -99,6 +99,8 @@ class RolloutWorker(threading.Thread):
             "instruction": "",
             "step": 0,
             "max_steps": MAX_STEPS_BY_SUITE.get(args.task_suite_name, 300),
+            "step_limit": args.max_rollout_steps,
+            "limit_reached": False,
             "paused": True,
             "done": False,
             "success": False,
@@ -272,6 +274,7 @@ class RolloutWorker(threading.Thread):
                         max_steps=MAX_STEPS_BY_SUITE.get(suite, 300),
                         done=False,
                         success=False,
+                        limit_reached=False,
                         connected=True,
                     )
                 self._record_instructions.append(
@@ -285,8 +288,8 @@ class RolloutWorker(threading.Thread):
                 continue
 
             with self._lock:
-                done = self.status["done"]
-            if done:
+                stopped = self.status["done"] or self.status["limit_reached"]
+            if stopped:
                 time.sleep(0.05)
                 continue
 
@@ -337,13 +340,19 @@ class RolloutWorker(threading.Thread):
         self._record_actions.append(np.asarray(action))
         self._publish_frame(obs, overlay=instruction, step=step + 1)
 
+        reached_limit = not done and (step + 1) >= self.args.max_rollout_steps
         with self._lock:
             self.status["step"] = step + 1
             if done:
                 self.status["done"] = True
                 self.status["success"] = True
+            elif reached_limit:
+                self.status["limit_reached"] = True
         if done:
             logger.info("Task solved at step %s", step + 1)
+            self._finalize_run()
+        elif reached_limit:
+            logger.info("Reached step limit (%s); stopping rollout", self.args.max_rollout_steps)
             self._finalize_run()
         return obs
 
@@ -470,6 +479,7 @@ INDEX_HTML = """
  .badge{padding:2px 9px;border-radius:10px;font-size:12px}
  .badge.run{background:#1f6f3f;color:#9be8b4} .badge.pause{background:#7a5b1e;color:#f0d59a}
  .badge.done{background:#1f5fae;color:#bcd9ff} .badge.load{background:#333;color:#bbb}
+ .badge.stop{background:#5a2d2d;color:#f3b0b0}
 </style></head><body><div class="wrap">
 <h1>Interactive LIBERO · π0.5</h1>
 <div class="row">
@@ -552,9 +562,11 @@ $('send').onclick=async()=>{
 };
 $('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
 
-let serverPaused=true;
+let serverPaused=true, limitReached=false;
 function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); }
-$('play').onclick=async()=>{ const np=!serverPaused; syncPlay(np);
+$('play').onclick=async()=>{
+ if(limitReached){ toast('Reached the step limit — press Reset to run again.','#e0a23b'); return; }
+ const np=!serverPaused; syncPlay(np);
  await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:np})});
  toast(np?'Paused':'Playing…','#d8a657');
 };
@@ -562,16 +574,17 @@ $('play').onclick=async()=>{ const np=!serverPaused; syncPlay(np);
 function row(k,v){ return `<div class="srow"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
 async function poll(){
  try{ const r=await fetch('/status'); const s=await r.json();
-  syncPlay(s.paused);
+  syncPlay(s.paused); limitReached=s.limit_reached;
   const badge = !s.connected ? '<span class="badge load">loading…</span>'
     : s.success ? '<span class="badge done">solved ✓</span>'
+    : s.limit_reached ? `<span class="badge stop">⏹ step limit (${s.step_limit}) — Reset</span>`
     : s.paused ? '<span class="badge pause">⏸ paused</span>'
     : '<span class="badge run">▶ running</span>';
   $('status').innerHTML =
     row('Task', `${s.task_id} · ${esc(s.suite)}`)
    +row('Scene goal', esc(s.task_language)||'—')
    +row('Prompt', esc(s.instruction)||'—')
-   +row('Step', `${s.step}`)
+   +row('Step', `${s.step} / ${s.step_limit}`)
    +row('State', badge);
  }catch(e){}
  setTimeout(poll,400);
@@ -589,6 +602,8 @@ def main():
     p.add_argument("--task-suite-name", default="libero_10")
     p.add_argument("--task-id", type=int, default=0)
     p.add_argument("--replan-steps", type=int, default=5)
+    p.add_argument("--max-rollout-steps", type=int, default=5000,
+                   help="auto-stop a rollout after this many steps (Reset to run again)")
     p.add_argument("--resize-size", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--runs-dir", default="runs")
