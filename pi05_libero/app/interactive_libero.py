@@ -533,8 +533,10 @@ def build_app(worker, args):
         if path is None:
             return jsonify(ok=False, error="No frames recorded yet — load a scene and press Play first."), 400
         # Saved on the pod under runs/videos/<name>.mp4; also stream it back as a download.
+        # send_file requires an absolute path on Flask 3.x.
+        path = pathlib.Path(path).resolve()
         return send_file(str(path), mimetype="video/mp4", as_attachment=True,
-                         download_name=pathlib.Path(path).name)
+                         download_name=path.name)
 
     return app
 
