@@ -23,6 +23,18 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CYAN='\033[36m'; NC='\033[0m'
 step() { echo -e "\n${CYAN}=== $* ===${NC}"; }
 
+# --- 0. system GL libraries (needed by MuJoCo EGL + robosuite) --------------
+# RunPod base images ship the NVIDIA EGL vendor lib but not the GLVND loader
+# (libEGL.so.1) or mesa GL, so robosuite/MuJoCo offscreen rendering fails without
+# these. Safe to skip if you lack apt/root (set SKIP_APT=1).
+if [ "${SKIP_APT:-0}" != "1" ] && command -v apt-get >/dev/null 2>&1; then
+  step "0/6  system GL libs (libegl1, libgl1, mesa)"
+  apt-get update -qq >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+    libegl1 libgl1 libglib2.0-0 libosmesa6 libgl1-mesa-dri >/dev/null 2>&1 || \
+    echo "  (apt install failed — install libegl1/libgl1 manually if rendering breaks)"
+fi
+
 # --- 1. uv -----------------------------------------------------------------
 step "1/6  install uv"
 if ! command -v uv >/dev/null 2>&1; then
@@ -59,7 +71,15 @@ uv pip install --python "$LV/bin/python" \
   -e packages/openpi-client -e third_party/libero flask \
   --extra-index-url https://download.pytorch.org/whl/cu113 \
   --index-strategy unsafe-best-match
-MUJOCO_GL=egl "$LV/bin/python" -c "import libero, openpi_client, flask, cv2, mujoco, robosuite; print('client venv OK')"
+
+# LIBERO's top-level package has no __init__.py (namespace pkg), so the PEP660
+# editable finder doesn't expose it — OpenPI's own README adds it to PYTHONPATH.
+export PYTHONPATH="$OPENPI_DIR/third_party/libero${PYTHONPATH:+:$PYTHONPATH}"
+# LIBERO prompts interactively on first import to create ~/.libero/config.yaml;
+# answer "N" once (use defaults) so it never blocks a non-interactive run.
+printf 'N\n' | MUJOCO_GL=egl "$LV/bin/python" -c "from libero.libero import benchmark" >/dev/null 2>&1 || true
+MUJOCO_GL=egl PYOPENGL_PLATFORM=egl "$LV/bin/python" -c \
+  "import libero, openpi_client, flask, cv2, mujoco, robosuite; from libero.libero import benchmark; print('client venv OK:', list(benchmark.get_benchmark_dict())[:3])"
 
 # --- 6. (optional) pre-download the pi0.5 LIBERO checkpoint -----------------
 if [ "$PREFETCH_CHECKPOINT" = "1" ]; then
@@ -73,6 +93,7 @@ fi
 cat > "$REPO_DIR/.openpi_env" <<EOF
 OPENPI_DIR=$OPENPI_DIR
 LIBERO_VENV=$LV
+LIBERO_PYTHONPATH=$OPENPI_DIR/third_party/libero
 OPENPI_COMMIT=$(git -C "$OPENPI_DIR" rev-parse --short HEAD)
 UV_CACHE_DIR=$UV_CACHE_DIR
 EOF

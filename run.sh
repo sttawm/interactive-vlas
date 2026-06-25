@@ -17,6 +17,9 @@ export PATH="$HOME/.local/bin:$PATH"
 export UV_CACHE_DIR
 export OPENPI_COMMIT
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
+export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+# LIBERO is a namespace package with no top-level __init__.py; expose it on PYTHONPATH.
+export PYTHONPATH="${LIBERO_PYTHONPATH}${PYTHONPATH:+:$PYTHONPATH}"
 
 TASK_SUITE="${TASK_SUITE:-libero_10}"
 WEB_PORT="${WEB_PORT:-8888}"
