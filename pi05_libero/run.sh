@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Launch the pi0.5 policy server + the interactive LIBERO web UI.
+# Launch the pi0.5 policy server + interactive LIBERO web UI, each in its own
+# tmux session so they survive SSH disconnects. Safe to re-run: an already-loaded
+# server is reused (avoids the multi-minute reload); the web UI is always restarted.
 #
 #   ./run.sh                         # libero_10 scenes, web UI on :8888
-#   TASK_SUITE=libero_goal ./run.sh  # pick a different task suite
+#   TASK_SUITE=libero_goal ./run.sh  # different task suite
+#   RESTART_SERVER=1 ./run.sh        # force-reload the policy server too
 #
-# Open the web UI from your laptop via the RunPod HTTP proxy:
-#   https://<POD_ID>-8888.proxy.runpod.net
-# or an SSH tunnel:  ssh -L 8888:localhost:8888 root@<ip> -p <port>  then http://localhost:8888
+# Then open the web UI from your laptop:
+#   - RunPod proxy:  https://<POD_ID>-8888.proxy.runpod.net   (POD_ID = $RUNPOD_POD_ID)
+#   - or SSH tunnel: ssh -L 8888:localhost:8888 root@<ip> -p <port>  then http://localhost:8888
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,49 +17,55 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$REPO_DIR/.openpi_env"
 export PATH="$HOME/.local/bin:$PATH"
-export UV_CACHE_DIR
-export OPENPI_COMMIT
-export MUJOCO_GL="${MUJOCO_GL:-egl}"
-export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
-# Cache the (12GB) checkpoint on the persistent volume so it survives pod
-# restarts instead of re-downloading to the ephemeral container disk.
-export OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/workspace/.cache/openpi}"
-# LIBERO is a namespace package with no top-level __init__.py; expose it on PYTHONPATH.
-export PYTHONPATH="${LIBERO_PYTHONPATH}${PYTHONPATH:+:$PYTHONPATH}"
 
 TASK_SUITE="${TASK_SUITE:-libero_10}"
 WEB_PORT="${WEB_PORT:-8888}"
 SERVER_PORT="${SERVER_PORT:-8000}"
-mkdir -p /workspace/setup-logs
+LOGDIR=/workspace/setup-logs
+mkdir -p "$LOGDIR"
+command -v tmux >/dev/null 2>&1 || { echo "Installing tmux..."; apt-get install -y -qq tmux >/dev/null 2>&1 || true; }
 
-# --- start the pi0.5 policy server -----------------------------------------
-# Call the server venv's python directly rather than `uv run`: on a network-FS
-# venv (RunPod /workspace), `uv run` revalidates the 12GB environment on every
-# launch, which can stall for many minutes. PYTHONUNBUFFERED for live logs.
-echo "Starting pi0.5 policy server on :$SERVER_PORT (log: /workspace/setup-logs/server.log)"
-( cd "$OPENPI_DIR" && PYTHONUNBUFFERED=1 "$OPENPI_DIR/.venv/bin/python" -u \
-    scripts/serve_policy.py --env LIBERO --port "$SERVER_PORT" ) \
-  >/workspace/setup-logs/server.log 2>&1 &
-SERVER_PID=$!
-cleanup() { echo "Stopping server ($SERVER_PID)"; kill "$SERVER_PID" 2>/dev/null || true; }
-trap cleanup EXIT INT TERM
+port_open() { (echo >/dev/tcp/127.0.0.1/"$1") 2>/dev/null; }
 
-# --- wait for the server to come up (first run downloads the checkpoint) ----
-# Startup is a few minutes: importing JAX + the openpi model stack off the
-# network-FS venv is open-latency bound, then the ~6GB checkpoint loads.
-echo "Waiting for policy server (first start takes a few minutes: imports + checkpoint)..."
-for i in $(seq 1 300); do
-  if "$LIBERO_VENV/bin/python" -c "import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0 if s.connect_ex(('127.0.0.1',$SERVER_PORT))==0 else 1)" 2>/dev/null; then
-    echo "Policy server is up."; break
-  fi
-  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-    echo "Policy server died. Last log lines:"; tail -30 /workspace/setup-logs/server.log; exit 1
-  fi
-  sleep 2
-done
+# --- policy server (tmux session 'server') ---------------------------------
+# Call the venv python directly, NOT `uv run`: on the /workspace network-FS venv,
+# `uv run` revalidates the 12GB env on every launch and stalls for minutes.
+if [ "${RESTART_SERVER:-0}" != "1" ] && port_open "$SERVER_PORT"; then
+  echo "✓ Policy server already up on :$SERVER_PORT (reusing it; RESTART_SERVER=1 to reload)."
+else
+  echo "Starting pi0.5 policy server in tmux (log: $LOGDIR/server.log)..."
+  tmux kill-session -t server 2>/dev/null || true
+  : > "$LOGDIR/server.log"
+  tmux new-session -d -s server \
+    "cd '$OPENPI_DIR' && PYTHONUNBUFFERED=1 UV_CACHE_DIR='$UV_CACHE_DIR' OPENPI_DATA_HOME='${OPENPI_DATA_HOME:-/workspace/.cache/openpi}' '$OPENPI_DIR/.venv/bin/python' -u scripts/serve_policy.py --env LIBERO --port $SERVER_PORT 2>&1 | tee '$LOGDIR/server.log'"
+  echo "Waiting for the server (first start ~5-8 min: imports off the network-FS venv, then checkpoint load)..."
+  for i in $(seq 1 360); do
+    port_open "$SERVER_PORT" && { echo "✓ Policy server is up."; break; }
+    tmux has-session -t server 2>/dev/null || { echo "✗ Server tmux session died. Last log:"; tail -25 "$LOGDIR/server.log"; exit 1; }
+    sleep 2
+  done
+  port_open "$SERVER_PORT" || { echo "✗ Server didn't come up in time. Check: tmux attach -t server"; exit 1; }
+fi
 
-# --- start the interactive web UI (foreground) -----------------------------
-echo "Starting interactive web UI on :$WEB_PORT  (suite: $TASK_SUITE)"
-exec "$LIBERO_VENV/bin/python" "$REPO_DIR/app/interactive_libero.py" \
-  --host 127.0.0.1 --port "$SERVER_PORT" \
-  --web-port "$WEB_PORT" --task-suite-name "$TASK_SUITE"
+# --- interactive web UI (tmux session 'webapp') ----------------------------
+echo "Starting interactive web UI in tmux on :$WEB_PORT (suite: $TASK_SUITE; log: $LOGDIR/webapp.log)..."
+tmux kill-session -t webapp 2>/dev/null || true
+: > "$LOGDIR/webapp.log"
+tmux new-session -d -s webapp \
+  "cd '$REPO_DIR' && PYTHONPATH='$LIBERO_PYTHONPATH' MUJOCO_GL=egl PYOPENGL_PLATFORM=egl OPENPI_COMMIT='${OPENPI_COMMIT:-}' '$LIBERO_VENV/bin/python' -u app/interactive_libero.py --host 127.0.0.1 --port $SERVER_PORT --web-port $WEB_PORT --task-suite-name '$TASK_SUITE' 2>&1 | tee '$LOGDIR/webapp.log'"
+for i in $(seq 1 30); do port_open "$WEB_PORT" && break; sleep 2; done
+port_open "$WEB_PORT" && echo "✓ Web UI is up." || echo "… Web UI still starting (check: tmux attach -t webapp)"
+
+# --- how to reach it / manage it -------------------------------------------
+echo
+echo "──────────────────────────────────────────────────────────────"
+if [ -n "${RUNPOD_POD_ID:-}" ]; then
+  echo "  Open:  https://${RUNPOD_POD_ID}-${WEB_PORT}.proxy.runpod.net"
+else
+  echo "  Open:  https://<POD_ID>-${WEB_PORT}.proxy.runpod.net   (\$RUNPOD_POD_ID was empty)"
+fi
+echo "  Tunnel alt: ssh -L ${WEB_PORT}:localhost:${WEB_PORT} <ssh-to-pod>  then http://localhost:${WEB_PORT}"
+echo "  Logs:  tmux attach -t server   |   tmux attach -t webapp   (detach: Ctrl-b d)"
+echo "  Stop:  tmux kill-server        (frees the GPU — do this before stopping the pod)"
+echo "──────────────────────────────────────────────────────────────"
+echo "Both run in tmux, so you can disconnect SSH and they keep running."

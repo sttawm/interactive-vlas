@@ -15,26 +15,40 @@ Type plain-English instructions and watch **π0.5** (pi0.5, via [OpenPI](https:/
 
 ## Setup (one command on a fresh GPU pod)
 
-**You need:** an NVIDIA GPU pod with **≥12 GB VRAM** (tested on an RTX A4500, 20 GB), Ubuntu 22.04, Python 3.11, and ~60 GB disk. A [RunPod](https://runpod.io) Community-Cloud RTX 3090/A4500/A5000 (~$0.20–0.30/hr) is plenty. Expose **port 8888** (HTTP) and **port 22** (SSH) when creating the pod.
+**You need:** an NVIDIA GPU pod with **≥12 GB VRAM** (tested on an RTX A4500, 20 GB), Ubuntu 22.04, Python 3.11, and ~60 GB disk. A [RunPod](https://runpod.io) Community-Cloud RTX 3090/A4500/A5000 (~$0.20–0.30/hr) is plenty. **Expose port 8888 (HTTP) and port 22 (SSH)** when creating the pod. Prefer a pod **near you** — an EU pod viewed from the US is laggy (both the ~5-8 min startup and the live frame rate).
 
 ```bash
-git clone https://github.com/sttawm/interactive-pi.git
-cd interactive-pi
-./setup.sh        # installs OpenPI + LIBERO + the pi0.5 checkpoint (~10–15 min, several GB)
-./run.sh          # starts the policy server + web UI
+git clone https://github.com/sttawm/interactive-vlas.git
+cd interactive-vlas/pi05_libero
+./setup.sh        # one-time: OpenPI + LIBERO + GL libs + tmux + pi0.5 checkpoint (~15–20 min)
+./run.sh          # starts the policy server + web UI, both in tmux; prints the URL
 ```
 
-`setup.sh` installs everything under `/workspace/openpi` (the persistent volume), so it survives pod restarts. Re-running it is safe.
+Everything heavy (OpenPI, the two venvs, the 12 GB checkpoint) installs under the persistent **`/workspace`** volume. `run.sh` launches both processes in **tmux**, so you can disconnect SSH and they keep running.
 
 ### Open the UI from your laptop
 
 - **RunPod HTTP proxy (easiest):** `https://<POD_ID>-8888.proxy.runpod.net`
-  (find `<POD_ID>` in the pod's Connect panel, or run `echo $RUNPOD_POD_ID` on the pod).
-- **SSH tunnel (works even if 8888 isn't exposed):**
+  (`echo $RUNPOD_POD_ID` on the pod, or see the pod's Connect panel).
+- **SSH tunnel (lower latency, works even if 8888 isn't exposed):**
   ```bash
   ssh -L 8888:localhost:8888 root@<ip> -p <port> -i ~/.ssh/id_ed25519
   ```
   then open `http://localhost:8888`.
+
+### Stop (to save GPU credits)
+
+```bash
+tmux kill-server     # stops the policy server + web UI, frees the GPU
+```
+Then stop the pod. The install persists on `/workspace`.
+
+### Next time (fast restart)
+
+- **Restarting the same pod, or attaching the same `/workspace` network volume to a new pod:** OpenPI + venvs + checkpoint are already there. Just re-run `./setup.sh` (fast — it only reinstalls the apt GL libs + tmux and re-seeds the LIBERO config, which live on the *ephemeral* container disk, then skips the big downloads) and `./run.sh`.
+- **Brand-new pod without that volume:** full `./setup.sh` again (~15–20 min).
+
+Notes: the first `run.sh` after a server (re)start waits ~5–8 min while JAX/OpenPI import off the network-FS venv and the checkpoint loads — it's in tmux, so just let it go. Re-running `run.sh` **reuses** an already-loaded server (only the web UI restarts); use `RESTART_SERVER=1 ./run.sh` to force a server reload. Logs: `tmux attach -t server` / `tmux attach -t webapp` (detach with `Ctrl-b d`).
 
 ---
 

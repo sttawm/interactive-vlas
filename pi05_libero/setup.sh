@@ -29,11 +29,11 @@ step() { echo -e "\n${CYAN}=== $* ===${NC}"; }
 # (libEGL.so.1) or mesa GL, so robosuite/MuJoCo offscreen rendering fails without
 # these. Safe to skip if you lack apt/root (set SKIP_APT=1).
 if [ "${SKIP_APT:-0}" != "1" ] && command -v apt-get >/dev/null 2>&1; then
-  step "0/6  system GL libs (libegl1, libgl1, mesa)"
+  step "0/6  system deps (GL libs for MuJoCo/robosuite + tmux for run.sh)"
   apt-get update -qq >/dev/null 2>&1 || true
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    libegl1 libgl1 libglib2.0-0 libosmesa6 libgl1-mesa-dri >/dev/null 2>&1 || \
-    echo "  (apt install failed — install libegl1/libgl1 manually if rendering breaks)"
+    libegl1 libgl1 libglib2.0-0 libosmesa6 libgl1-mesa-dri tmux >/dev/null 2>&1 || \
+    echo "  (apt install failed — install libegl1/libgl1/tmux manually if needed)"
 fi
 
 # --- 1. uv -----------------------------------------------------------------
