@@ -458,8 +458,15 @@ INDEX_HTML = """
 </div></div>
 <script>
 const $=id=>document.getElementById(id);
-function refreshFrame(){ $('view').src='/frame.jpg?t='+Date.now(); }
-setInterval(refreshFrame,100);
+// Chain each frame fetch off the previous load: polling faster than a frame can
+// load (e.g. through a high-latency reverse proxy) aborts the in-flight request,
+// so the <img> rarely renders. onload-chaining fetches the next frame only once
+// the current one has fully loaded -> smooth updates at whatever fps the link allows.
+const view=$('view');
+function nextFrame(){ view.src='/frame.jpg?t='+Date.now(); }
+view.onload=()=>setTimeout(nextFrame,20);
+view.onerror=()=>setTimeout(nextFrame,150);
+nextFrame();
 async function loadTasks(){
  const s=$('suite').value;
  const r=await fetch('/tasks?suite='+s); const j=await r.json();
