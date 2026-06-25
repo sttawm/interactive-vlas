@@ -35,9 +35,8 @@ results/checkpoints/**/*.pt
 results/checkpoints/**/*.pth
 results/checkpoints/**/*.safetensors
 
-# Upstream reference clones (not vendored; real installs live on the GPU pod)
+# Upstream reference clone (not vendored; real install lives on the GPU pod)
 openpi-ref/
-molmo/
 
 # Machine-specific paths written by each instance's setup.sh
 **/.openpi_env
