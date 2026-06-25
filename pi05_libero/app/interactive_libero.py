@@ -23,6 +23,7 @@ import logging
 import math
 import os
 import pathlib
+import re
 import threading
 import time
 
@@ -34,7 +35,7 @@ os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 import cv2
 import imageio
 import numpy as np
-from flask import Flask, Response, jsonify, render_template_string, request
+from flask import Flask, Response, jsonify, render_template_string, request, send_file
 
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
@@ -110,6 +111,7 @@ class RolloutWorker(threading.Thread):
         # Per-rollout recording (only touched by worker thread).
         self._record_frames = []
         self._record_actions = []
+        self._record_prompts = []  # prompt active at each recorded frame (for captions)
         self._record_instructions = []  # (wall_time, step, instruction)
         self._run_dir = None
 
@@ -197,6 +199,7 @@ class RolloutWorker(threading.Thread):
         self._run_dir = run_dir
         self._record_frames = []
         self._record_actions = []
+        self._record_prompts = []
         self._record_instructions = []
         self._run_meta = {
             "suite": suite,
@@ -349,6 +352,7 @@ class RolloutWorker(threading.Thread):
 
         self._record_frames.append(img)
         self._record_actions.append(np.asarray(action))
+        self._record_prompts.append(str(instruction))
         self._publish_frame(obs, overlay=instruction, step=step + 1)
 
         reached_limit = not done and (step + 1) >= self.args.max_rollout_steps
@@ -385,6 +389,61 @@ class RolloutWorker(threading.Thread):
         if ok:
             with self._lock:
                 self._latest_jpeg = buf.tobytes()
+
+    def compose_video(self, name, speed=1.0, out_size=480):
+        """Render the run-so-far to runs/videos/<name>.mp4 with the active prompt
+        captioned below each frame, at fps = 10 x speed. Returns the path (or None
+        if there are no frames yet)."""
+        # Snapshot under lock (cheap — copies references, not pixels).
+        with self._lock:
+            frames = list(self._record_frames)
+            prompts = list(self._record_prompts)
+            goal = self.status.get("task_language", "")
+        if not frames:
+            return None
+        if len(prompts) < len(frames):  # pad in case of a race on the last frame
+            prompts += [prompts[-1] if prompts else ""] * (len(frames) - len(prompts))
+
+        safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("_") or "video"
+        vid_dir = pathlib.Path(self.args.runs_dir) / "videos"
+        vid_dir.mkdir(parents=True, exist_ok=True)
+        path = vid_dir / f"{safe}.mp4"
+
+        cap_h = 64
+        W, font = out_size, cv2.FONT_HERSHEY_SIMPLEX
+        fps = max(1, int(round(10 * float(speed))))
+        writer = imageio.get_writer(str(path), fps=fps, macro_block_size=None)
+        try:
+            for img, prompt in zip(frames, prompts):
+                fr = cv2.resize(img, (W, out_size), interpolation=cv2.INTER_LINEAR)
+                canvas = np.zeros((out_size + cap_h, W, 3), dtype=np.uint8)
+                canvas[:out_size] = fr  # img is RGB; imageio writes RGB
+                lines = _wrap_text(prompt or "—", font, 0.5, 1, W - 16)[:2]
+                y = out_size + 24
+                for ln in lines:
+                    cv2.putText(canvas, ln, (8, y), font, 0.5, (240, 240, 240), 1, cv2.LINE_AA)
+                    y += 22
+                writer.append_data(canvas)
+        finally:
+            writer.close()
+        logger.info("Saved video %s (%d frames, %dx, goal=%r)", path, len(frames), fps // 10 or 1, goal)
+        return path
+
+
+def _wrap_text(text, font, scale, thick, max_w):
+    """Greedy word-wrap so a caption fits within max_w pixels."""
+    out, cur = [], ""
+    for w in str(text).split():
+        test = (cur + " " + w).strip()
+        (tw, _), _ = cv2.getTextSize(test, font, scale, thick)
+        if tw > max_w and cur:
+            out.append(cur)
+            cur = w
+        else:
+            cur = test
+    if cur:
+        out.append(cur)
+    return out or [""]
 
 
 def _placeholder_jpeg(text):
@@ -462,6 +521,21 @@ def build_app(worker, args):
         worker.set_paused((request.json or {}).get("paused", True))
         return jsonify(ok=True)
 
+    @app.route("/save_video", methods=["POST"])
+    def save_video():
+        body = request.json or {}
+        name = body.get("name") or "rollout"
+        try:
+            speed = float(body.get("speed", 1) or 1)
+        except (TypeError, ValueError):
+            speed = 1.0
+        path = worker.compose_video(name, speed=speed)
+        if path is None:
+            return jsonify(ok=False, error="No frames recorded yet — load a scene and press Play first."), 400
+        # Saved on the pod under runs/videos/<name>.mp4; also stream it back as a download.
+        return send_file(str(path), mimetype="video/mp4", as_attachment=True,
+                         download_name=pathlib.Path(path).name)
+
     return app
 
 
@@ -520,6 +594,16 @@ INDEX_HTML = """
   </div>
   <div class="hint">Send a new instruction any time &mdash; corrections or staged subgoals. Objects must exist in the loaded scene.</div>
 
+  <div class="row" style="gap:8px;margin-top:14px;align-items:center">
+   <button id="savevid" class="alt" style="flex:2">💾 Save video</button>
+   <label style="margin:0;color:#aaa">speed</label>
+   <select id="speed" style="flex:0 0 auto">
+    <option value="1">1×</option><option value="2" selected>2×</option>
+    <option value="4">4×</option><option value="8">8×</option>
+   </select>
+  </div>
+  <div class="hint">Saves the run-so-far with the active prompt captioned below each frame; downloads to your laptop and keeps a copy in <code>runs/videos/</code> on the pod.</div>
+
   <div class="toast" id="toast"></div>
   <div class="status" id="status"></div>
  </div>
@@ -574,6 +658,24 @@ $('send').onclick=async()=>{
  toast(serverPaused?'Instruction set ✓ — press Play':'Instruction sent ✓');
 };
 $('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
+
+$('savevid').onclick=async()=>{
+ const def='task'+($('task').value||'0')+'_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+ const name=prompt('Name this video:', def);
+ if(name===null) return;                       // cancelled
+ const speed=$('speed').value;
+ const btn=$('savevid'), orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering…';
+ toast('Rendering video ('+speed+'×)…','#d8a657');
+ try{
+  const r=await fetch('/save_video',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,speed})});
+  if(!r.ok){ let j={}; try{j=await r.json();}catch(e){} toast(j.error||'Save failed','#e06c75'); return; }
+  const blob=await r.blob(), url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=(name||'rollout')+'.mp4';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  toast('Saved ✓ — downloaded + kept in runs/videos/ on the pod');
+ }catch(e){ toast('Save failed: '+e,'#e06c75'); }
+ finally{ btn.disabled=false; btn.textContent=orig; }
+};
 
 let serverPaused=true, limitReached=false;
 function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); }
