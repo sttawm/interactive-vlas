@@ -131,11 +131,13 @@ class RolloutWorker(threading.Thread):
         logger.info("New instruction @step %s: %r", self.status["step"], text)
 
     def request_reset(self, suite, task_id, init_id, instruction=""):
+        # Land paused & ready: the env loads and shows its first frame, but the
+        # rollout doesn't step until the user presses Play.
         with self._lock:
             self._reset_to = (suite, int(task_id), int(init_id))
             self._reset_instruction = (instruction or "").strip()
-            self._paused = False
-            self.status["paused"] = False
+            self._paused = True
+            self.status["paused"] = True
 
     def set_paused(self, paused):
         with self._lock:
@@ -448,20 +450,26 @@ INDEX_HTML = """
  input[type=text]{width:100%}
  button{background:#2d6cdf;border:none;cursor:pointer}
  button.alt{background:#444}
- .status{font-family:monospace;font-size:13px;background:#000;padding:10px;border-radius:6px;white-space:pre-wrap;line-height:1.5}
- .ok{color:#3fb950}.bad{color:#888}
- label{font-size:12px;color:#aaa;display:block;margin:12px 0 4px}
- .hint{color:#888;font-size:12px;margin-top:4px}
- button:active{transform:scale(0.98)} button:disabled{opacity:0.5;cursor:default}
- #pause.paused{background:#b5862d}
- .toast{min-height:18px;font-size:13px;color:#3fb950;margin:10px 0 4px;transition:opacity .25s;opacity:0}
+ label{font-size:12px;color:#aaa;display:block;margin:14px 0 5px}
+ .hint{color:#888;font-size:12px;margin-top:5px}
+ button:active{transform:scale(0.98)} button:disabled{opacity:0.45;cursor:default}
+ .green{background:#2ea043} #play.ready{background:#2ea043}
+ button.big{padding:11px;font-weight:600;font-size:15px}
+ .toast{min-height:18px;font-size:13px;color:#3fb950;margin:12px 0 6px;transition:opacity .25s;opacity:0}
  .toast.show{opacity:1}
+ .status{background:#000;padding:4px 12px;border-radius:8px;font-size:13px}
+ .srow{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px solid #191919}
+ .srow:last-child{border-bottom:none}
+ .srow .k{color:#888} .srow .v{color:#eee;font-family:ui-monospace,monospace;text-align:right;word-break:break-word}
+ .badge{padding:2px 9px;border-radius:10px;font-size:12px}
+ .badge.run{background:#1f6f3f;color:#9be8b4} .badge.pause{background:#7a5b1e;color:#f0d59a}
+ .badge.done{background:#1f5fae;color:#bcd9ff} .badge.load{background:#333;color:#bbb}
 </style></head><body><div class="wrap">
 <h1>Interactive LIBERO · π0.5</h1>
 <div class="row">
  <img id="view" src="/frame.jpg">
  <div class="panel">
-  <label>1 · LIBERO task — picks the scene &amp; objects (its goal is just the default prompt)</label>
+  <label>Task &mdash; selecting one loads its scene (objects), paused &amp; ready</label>
   <div class="row" style="gap:8px">
    <select id="suite" style="flex:1">
     <option>libero_10</option><option>libero_goal</option>
@@ -470,25 +478,26 @@ INDEX_HTML = """
    <select id="task" style="flex:2"></select>
   </div>
 
-  <label>2 · Instruction sent to π0.5 — leave blank to use the task's own goal</label>
-  <input type="text" id="instr" placeholder="(optional) type your own, e.g. put the bowl on the plate">
+  <label>Instruction to π0.5 &mdash; blank uses the task's own goal</label>
+  <div class="row" style="gap:8px">
+   <input type="text" id="instr" style="flex:1" placeholder="e.g. pick up the bowl">
+   <button id="send" class="green">Send</button>
+  </div>
   <div class="hint" id="canon"></div>
 
-  <button id="load" style="margin-top:10px;width:100%">▶ Load scene &amp; start</button>
-  <div class="row" style="gap:8px;margin-top:8px">
-   <button id="send" style="flex:2">Send instruction (replan now)</button>
-   <button id="pause" class="alt" style="flex:1">⏸ Pause</button>
-   <button id="reset" class="alt" style="flex:1">↻ Reset</button>
+  <div class="row" style="gap:8px;margin-top:16px">
+   <button id="play" class="big" style="flex:2">▶ Play</button>
+   <button id="reset" class="alt big" style="flex:1">↻ Reset</button>
   </div>
-  <div class="hint">Send a new instruction any time mid-rollout — corrections or staged subgoals. Objects must exist in the loaded scene.</div>
+  <div class="hint">Send a new instruction any time &mdash; corrections or staged subgoals. Objects must exist in the loaded scene.</div>
 
   <div class="toast" id="toast"></div>
-  <label>Status</label>
-  <div class="status" id="status">Pick a task and hit “Load scene &amp; start”.</div>
+  <div class="status" id="status"></div>
  </div>
 </div></div>
 <script>
 const $=id=>document.getElementById(id);
+const esc=s=>(s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 // Primary: MJPEG stream (one connection, bandwidth-bound, smooth even over a
 // distant/proxied link). Fallback: if the stream fails to start within a couple
 // seconds (e.g. a proxy that buffers multipart), switch to onload-chained polling
@@ -507,7 +516,7 @@ startStream();
 
 let toastTimer;
 function toast(msg,color){ const t=$('toast'); t.textContent=msg; t.style.color=color||'#3fb950'; t.classList.add('show');
- clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500); }
+ clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600); }
 
 async function loadTasks(){
  const s=$('suite').value;
@@ -516,48 +525,52 @@ async function loadTasks(){
  showCanon();
 }
 function canonGoal(){ const o=$('task').selectedOptions[0]; return o?o.textContent.replace(/^Task \\d+ — /,''):''; }
-function showCanon(){ const g=canonGoal(); $('canon').textContent=g?('default goal (used if box is blank): '+g):''; }
-$('suite').onchange=loadTasks; $('task').onchange=showCanon;
+function showCanon(){ const g=canonGoal(); $('canon').textContent=g?('default goal: '+g):''; }
 
+// Selecting a task (or suite) auto-loads its scene, paused & ready for Play.
 async function doLoad(){
  const instr=$('instr').value.trim();
- toast(instr?'Loading scene with your prompt…':'Loading scene (using task default)…','#d8a657');
- $('load').disabled=true;
+ toast('Loading scene… (paused — press Play to start)','#d8a657');
  await fetch('/reset',{method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({suite:$('suite').value,task_id:parseInt($('task').value),init_id:0,instruction:instr})});
 }
-$('load').onclick=doLoad;
-$('reset').onclick=()=>{ toast('Resetting scene…','#d8a657'); doLoad(); };
+$('suite').onchange=async()=>{ await loadTasks(); doLoad(); };
+$('task').onchange=doLoad;
+$('reset').onclick=()=>{ toast('Reset — press Play to start','#d8a657'); doLoad(); };
 
 $('send').onclick=async()=>{
  const t=$('instr').value.trim();
  if(!t){ toast('Type an instruction first.','#e06c75'); return; }
  await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});
- toast('Instruction sent ✓');
+ toast(serverPaused?'Instruction set ✓ — press Play':'Instruction sent ✓');
 };
 $('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
 
 let serverPaused=true;
-function syncPause(p){ serverPaused=p; const b=$('pause'); b.textContent=p?'▶ Resume':'⏸ Pause'; b.classList.toggle('paused',p); }
-$('pause').onclick=async()=>{ const np=!serverPaused; syncPause(np);
+function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); }
+$('play').onclick=async()=>{ const np=!serverPaused; syncPlay(np);
  await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:np})});
- toast(np?'Paused':'Resumed','#d8a657');
+ toast(np?'Paused':'Playing…','#d8a657');
 };
 
-let wasConnected=false;
+function row(k,v){ return `<div class="srow"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
 async function poll(){
  try{ const r=await fetch('/status'); const s=await r.json();
-  if(s.connected){ $('load').disabled=false; if(!wasConnected){ toast('Scene loaded ✓'); wasConnected=true; } }
-  syncPause(s.paused);
-  $('status').textContent=
-   `task:    ${s.task_id}  ·  scene goal: ${s.task_language}\n`+
-   `prompt:  ${s.instruction}\n`+
-   `step:    ${s.step}  (runs until solved or you reset; benchmark episodes are ${s.max_steps})\n`+
-   `paused:  ${s.paused}    solved: ${s.success}`;
+  syncPlay(s.paused);
+  const badge = !s.connected ? '<span class="badge load">loading…</span>'
+    : s.success ? '<span class="badge done">solved ✓</span>'
+    : s.paused ? '<span class="badge pause">⏸ paused</span>'
+    : '<span class="badge run">▶ running</span>';
+  $('status').innerHTML =
+    row('Task', `${s.task_id} · ${esc(s.suite)}`)
+   +row('Scene goal', esc(s.task_language)||'—')
+   +row('Prompt', esc(s.instruction)||'—')
+   +row('Step', `${s.step}`)
+   +row('State', badge);
  }catch(e){}
  setTimeout(poll,400);
 }
-loadTasks(); poll();
+(async()=>{ await loadTasks(); doLoad(); poll(); })();
 </script></body></html>
 """
 
