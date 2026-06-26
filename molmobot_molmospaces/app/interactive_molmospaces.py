@@ -343,6 +343,11 @@ class RolloutWorker(threading.Thread):
             self._paused = True
             self.status["paused"] = True
             self.status["instruction"] = self._instruction
+            # Clear prior-run state synchronously so the UI never flashes "step limit
+            # reached" while the new scene builds.
+            self.status["limit_reached"] = False
+            self.status["step"] = 0
+            self.status["ready"] = False
 
     def _make_policy(self, vla, view):
         if vla == "stub":
@@ -378,9 +383,7 @@ class RolloutWorker(threading.Thread):
         sent = ("%s   (@step %d)" % (s["sent_prompt"], s["sent_step"])) if s["sent_prompt"] \
             else "— nothing sent yet (press Play) —"
         return {
-            "VLA": s["vla"],
-            "Env": s["env"],
-            "Scene": "house %s" % s["house"],
+            # VLA / Env / Scene are already shown in the selectors above — don't duplicate.
             "Prompt (set)": prompt,
             "→ Sent to policy": sent,
             "Step": "%d / %d" % (s["step"], s["max_steps"]),
@@ -551,16 +554,18 @@ class RolloutWorker(threading.Thread):
         frame = _stack({"exo_camera_1": None})  # placeholder if render fails
         try:
             imgs = world.render()
-            frame = np.hstack([imgs["exo_camera_1"], imgs["wrist_camera"]])
+            # Stack the two cameras VERTICALLY (exo over wrist) -> near-square ~640x720,
+            # which displays well in the shared square-ish view (side-by-side was a thin
+            # squished strip).
+            frame = np.vstack([imgs["exo_camera_1"], imgs["wrist_camera"]])
         except Exception:
             logger.exception("render failed")
             return
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        h = frame.shape[0]
         if overlay:
-            label = overlay if len(overlay) < 80 else overlay[:77] + "..."
-            cv2.rectangle(frame, (0, 0), (frame.shape[1], 28), (0, 0, 0), -1)
-            cv2.putText(frame, f"{label}   [step {step}]", (6, 20),
+            label = overlay if len(overlay) < 58 else overlay[:55] + "..."
+            cv2.rectangle(frame, (0, 0), (frame.shape[1], 26), (0, 0, 0), -1)
+            cv2.putText(frame, f"{label}   [step {step}]", (6, 19),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if ok:
@@ -570,13 +575,13 @@ class RolloutWorker(threading.Thread):
 
 def _stack(obs):
     if obs.get("exo_camera_1") is None:
-        return np.zeros((360, 1280, 3), dtype=np.uint8)
-    return np.hstack([obs["exo_camera_1"], obs["wrist_camera"]])
+        return np.zeros((720, 640, 3), dtype=np.uint8)
+    return np.vstack([obs["exo_camera_1"], obs["wrist_camera"]])
 
 
 def _placeholder_jpeg(text):
-    img = np.zeros((360, 1280, 3), dtype=np.uint8)
-    cv2.putText(img, text, (20, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
+    img = np.zeros((720, 640, 3), dtype=np.uint8)
+    cv2.putText(img, text, (20, 360), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
     ok, buf = cv2.imencode(".jpg", img)
     return buf.tobytes()
 

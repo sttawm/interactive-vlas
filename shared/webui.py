@@ -249,7 +249,10 @@ $('savevid').onclick=async()=>{ const def='run_'+new Date().toISOString().slice(
  }catch(e){ toast('Save failed: '+e,'#e06c75'); } finally{ btn.disabled=false; btn.textContent=orig; } };
 let serverPaused=true, limitReached=false;
 function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); }
-$('play').onclick=async()=>{ if(limitReached){toast('Step limit reached — press Reset.','#e0a23b');return;} const np=!serverPaused; syncPlay(np);
+$('play').onclick=async()=>{ if(limitReached){toast('Step limit reached — press Reset.','#e0a23b');return;}
+ const np=!serverPaused;
+ if(!np){ const t=$('instr').value.trim(); if(t) await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); }  // pressing Play also sends the typed prompt
+ syncPlay(np);
  await fetch('/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused:np})}); toast(np?'Paused':'Playing…','#d8a657'); };
 
 function row(k,v){ return `<div class="srow"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`; }
