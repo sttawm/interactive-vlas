@@ -264,7 +264,7 @@ class RolloutWorker(threading.Thread):
         self._stop = threading.Event()
 
         self._instruction = args.instruction or self._scene_default_prompt(args.house_index)
-        self._latest_jpeg = _placeholder_jpeg("pick a VLA + scene")
+        self._latest_jpeg = _placeholder_jpeg("loading MolmoBot model + scene...")
         self._paused = True
         self._reset_to = {"vla": self._default_vla, "house_index": args.house_index}
         self._force_refresh = False
@@ -306,8 +306,9 @@ class RolloutWorker(threading.Thread):
         logger.info("New instruction @step %s: %r", step, text)
 
     def _scene_default_prompt(self, house_index):
-        # House 0 carries the demo bowl + knife (the verified default); others generic.
-        return "pick up the knife" if house_index == 0 else "pick up an object"
+        # MolmoSpaces houses have no canonical task (unlike LIBERO's per-task trained
+        # instruction) — just a neutral suggestion; type whatever object is in view.
+        return "pick up an object"
 
     def config(self):
         scenes = [{"value": f"house {i}", "label": f"house {i}",
@@ -370,7 +371,7 @@ class RolloutWorker(threading.Thread):
         with self._lock:
             s = dict(self.status)
         if not s["ready"]:
-            state = "loading…"
+            state = "⏳ loading model + scene…"
         elif s["limit_reached"]:
             state = "⏹ step limit (%d) — Reset" % s["max_steps"]
         elif s["paused"]:
@@ -641,10 +642,12 @@ def main():
 
     # The VLA selector only advertises what this server can actually run: MolmoBot
     # needs the `olmo` package (and a GPU); `stub` always works. --stub hides MolmoBot.
-    available = []
-    if molmobot_available() and not args.stub:
-        available.append("MolmoBot")
-    available.append("stub")
+    # Only offer "stub" when actually in stub mode (no model / no GPU). The real pod
+    # offers just "MolmoBot" so the VLA selector isn't cluttered with the test policy.
+    if args.stub or not molmobot_available():
+        available = ["stub"]
+    else:
+        available = ["MolmoBot"]
     logger.info("Available VLAs: %s", available)
 
     worker = RolloutWorker(args, available)
