@@ -215,7 +215,6 @@ class LiberoWorker(threading.Thread):
             "Scene goal": s["task_language"] or "—",
             "Prompt (set)": prompt,
             "→ Sent to policy": sent,
-            "Goal met (orig. task)": "yes ✓" if s["success"] else "no",
             "Step": "%d / %d" % (s["step"], s["step_limit"]),
             "State": state,
             # consumed by the frontend (Play button + limit handling), not shown as rows:
