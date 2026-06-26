@@ -205,19 +205,11 @@ class LiberoWorker(threading.Thread):
             state = "⏸ paused"
         else:
             state = "▶ running"
-        prompt = s["instruction"] or "—"
-        if s["instruction"] and s["instruction"] != s["sent_prompt"]:
-            prompt += "   (pending — not executed yet)"
-        sent = ("%s   (@step %d)" % (s["sent_prompt"], s["sent_step"])) if s["sent_prompt"] \
-            else "— nothing sent yet (press Play) —"
+        # The prompt lives in the (editable-while-paused) box and is sent on Play, so the
+        # status box just needs Step + State. (paused/limit_reached drive the frontend.)
         return {
-            # Suite/scene are shown in the selectors above — don't duplicate.
-            "Scene goal": s["task_language"] or "—",
-            "Prompt (set)": prompt,
-            "→ Sent to policy": sent,
             "Step": "%d / %d" % (s["step"], s["step_limit"]),
             "State": state,
-            # consumed by the frontend (Play button + limit handling), not shown as rows:
             "paused": s["paused"],
             "limit_reached": s["limit_reached"],
         }

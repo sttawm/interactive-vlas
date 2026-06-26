@@ -378,18 +378,11 @@ class RolloutWorker(threading.Thread):
             state = "⏸ paused"
         else:
             state = "▶ running"
-        prompt = s["instruction"] or "—"
-        if s["instruction"] and s["instruction"] != s["sent_prompt"]:
-            prompt += "   (pending — not executed yet)"
-        sent = ("%s   (@step %d)" % (s["sent_prompt"], s["sent_step"])) if s["sent_prompt"] \
-            else "— nothing sent yet (press Play) —"
+        # Prompt lives in the (editable-while-paused) box and is sent on Play -> status
+        # just needs Step + State. (paused/limit_reached drive the frontend.)
         return {
-            # VLA / Env / Scene are already shown in the selectors above — don't duplicate.
-            "Prompt (set)": prompt,
-            "→ Sent to policy": sent,
             "Step": "%d / %d" % (s["step"], s["max_steps"]),
             "State": state,
-            # consumed by the frontend (Play button + step-limit handling), not displayed:
             "paused": s["paused"],
             "limit_reached": s["limit_reached"],
         }

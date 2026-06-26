@@ -178,6 +178,7 @@ INDEX_HTML = r"""
  input[type=text]{width:100%}
  button{background:#2d6cdf;border:none;cursor:pointer} button.alt{background:#444}
  button:active{transform:scale(0.98)} button:disabled{opacity:0.45;cursor:default}
+ input:disabled{opacity:0.5;cursor:not-allowed}
  .green{background:#2ea043} #play.ready{background:#2ea043} button.big{padding:11px;font-weight:600;font-size:15px}
  label{font-size:12px;color:#aaa;display:block;margin:14px 0 5px}
  .hint{color:#888;font-size:12px;margin-top:5px}
@@ -195,7 +196,8 @@ INDEX_HTML = r"""
  <div class="panel">
   <div id="selectors"></div>
   <label id="instrlabel">Instruction</label>
-  <div class="row" style="gap:8px"><input type="text" id="instr" style="flex:1" placeholder=""><button id="send" class="green">Send</button></div>
+  <input type="text" id="instr" placeholder="">
+  <div class="hint">Editable while paused; press Play to send it &amp; run.</div>
   <div class="hint" id="canon"></div>
   <div id="examples"></div>
   <div class="row" style="gap:8px;margin-top:16px"><button id="play" class="big" style="flex:2">▶ Play</button><button id="reset" class="alt big" style="flex:1">↻ Reset</button></div>
@@ -244,16 +246,14 @@ function showCanon(){ const o=currentOpt();
  const box=$('examples');
  if(ex && ex.length>=1){
   box.innerHTML='<div class="hint" style="margin:8px 0 2px">'+ex.length+(ex.length==1?' task':' tasks')+' trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
-  box.querySelectorAll('.chip').forEach((c,i)=>c.onclick=()=>{ $('instr').value=ex[i]; toast('Prompt set — press Play or Send'); });
+  box.querySelectorAll('.chip').forEach((c,i)=>c.onclick=()=>{ if(!serverPaused){toast('Pause to change the prompt','#e0a23b');return;} $('instr').value=ex[i]; toast('Prompt set — press Play'); });
  } else box.innerHTML='';
 }
 
 async function doLoad(){ toast('Loading scene… (paused — press Play)','#d8a657');
  await fetch('/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selection:selection(),instruction:$('instr').value.trim()})}); }
 $('reset').onclick=()=>{ toast('Reset — press Play to start','#d8a657'); doLoad(); };
-$('send').onclick=async()=>{ const t=$('instr').value.trim(); if(!t){toast('Type an instruction first.','#e06c75');return;}
- await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); toast(serverPaused?'Instruction set ✓ — press Play':'Instruction sent ✓'); };
-$('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('send').click();});
+$('instr').addEventListener('keydown',e=>{if(e.key==='Enter')$('play').click();});  // Enter = Play (sends the prompt & runs)
 $('savevid').onclick=async()=>{ const def='run_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-'); const name=prompt('Name this video:',def); if(name===null)return;
  const speed=$('speed').value,btn=$('savevid'),orig=btn.textContent; btn.disabled=true; btn.textContent='Rendering…'; toast('Rendering video ('+speed+'×)…','#d8a657');
  try{ const r=await fetch('/save_video',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,speed})});
@@ -261,7 +261,7 @@ $('savevid').onclick=async()=>{ const def='run_'+new Date().toISOString().slice(
   const blob=await r.blob(),url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(name||'run')+'.mp4'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); toast('Saved ✓ — downloaded + kept on the pod');
  }catch(e){ toast('Save failed: '+e,'#e06c75'); } finally{ btn.disabled=false; btn.textContent=orig; } };
 let serverPaused=true, limitReached=false;
-function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); }
+function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); $('instr').disabled=!p; }  // prompt editable only while paused
 $('play').onclick=async()=>{ if(limitReached){toast('Step limit reached — press Reset.','#e0a23b');return;}
  const np=!serverPaused;
  if(!np){ const t=$('instr').value.trim(); if(t) await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); }  // pressing Play also sends the typed prompt
