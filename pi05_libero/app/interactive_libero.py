@@ -99,26 +99,51 @@ class LiberoWorker(threading.Thread):
 
     # ----- contract: config / status / control -----
 
+    def _scene_groups(self, suite):
+        """Ordered [(label, [task_ids])] grouping tasks that share a scene. libero_90/10
+        use the bddl SCENE prefix (verified: same scene == identical object set, so any
+        task loads a scene where all its sibling tasks are valid). Other suites fall back
+        to one task per entry."""
+        ts = self._benchmark_dict[suite]()
+        langs = self._task_languages(suite)
+        groups = collections.OrderedDict()
+        for i in range(ts.n_tasks):
+            m = re.match(r"([A-Z][A-Z_]*SCENE\d+)", ts.get_task(i).bddl_file)
+            groups.setdefault(m.group(1) if m else "task_%d" % i, []).append(i)
+        out = []
+        for key, tids in groups.items():
+            if key.startswith("task_") and len(tids) == 1:
+                out.append((langs[tids[0]], tids))  # ungrouped -> label by its instruction
+            else:
+                out.append((key, tids))
+        return out
+
     def config(self):
         options_by = {}
         for s in SUITES:
-            options_by[s] = [{"value": str(i), "label": "Task %d — %s" % (i, lang),
-                              "default_prompt": lang}
-                             for i, lang in enumerate(self._task_languages(s))]
+            langs = self._task_languages(s)
+            opts = []
+            for label, tids in self._scene_groups(s):
+                rep = tids[0]
+                disp = label if len(tids) == 1 else "%s — %d tasks" % (label, len(tids))
+                opts.append({"value": str(rep), "label": disp,
+                             "default_prompt": langs[rep],
+                             "examples": [langs[i] for i in tids]})
+            options_by[s] = opts
         return {
             "title": "π0.5 · LIBERO",
             "selectors": [
                 {"name": "suite", "label": "Suite", "options": SUITES},
-                {"name": "task", "label": "Task", "depends_on": "suite", "options_by": options_by},
+                {"name": "scene", "label": "Scene / task", "depends_on": "suite", "options_by": options_by},
             ],
-            "instruction_label": "Instruction to π0.5 — blank uses the task's own goal",
+            "instruction_label": "Instruction to π0.5 — blank uses the scene's default task",
             "instruction_placeholder": "e.g. pick up the bowl",
         }
 
     def default_prompt(self, selection):
         try:
             suite = selection.get("suite", SUITES[0])
-            tid = int(selection.get("task", 0))
+            tid = int(selection.get("scene", selection.get("task", 0)))
             return str(self._task_languages(suite)[tid])
         except Exception:
             return ""
@@ -263,7 +288,8 @@ class LiberoWorker(threading.Thread):
                     except Exception:
                         pass
                 suite = reset_to.get("suite", SUITES[0])
-                task_id = int(reset_to.get("task", 0))
+                # selection["scene"] is the representative task id for that scene.
+                task_id = int(reset_to.get("scene", reset_to.get("task", 0)))
                 init_id = int(reset_to.get("init", 0))
                 logger.info("Loading %s task %s...", suite, task_id)
                 try:

@@ -181,6 +181,8 @@ INDEX_HTML = r"""
  .green{background:#2ea043} #play.ready{background:#2ea043} button.big{padding:11px;font-weight:600;font-size:15px}
  label{font-size:12px;color:#aaa;display:block;margin:14px 0 5px}
  .hint{color:#888;font-size:12px;margin-top:5px}
+ .chip{display:inline-block;background:#1f1f1f;border:1px solid #3a3a3a;border-radius:13px;padding:4px 10px;margin:3px 5px 0 0;font-size:12px;color:#bcd9ff;cursor:pointer}
+ .chip:hover{background:#2d6cdf;color:#fff;border-color:#2d6cdf}
  .sel{display:flex;gap:8px;flex-wrap:wrap}.sel>div{flex:1;min-width:130px}
  .toast{min-height:18px;font-size:13px;color:#3fb950;margin:12px 0 6px;transition:opacity .25s;opacity:0}.toast.show{opacity:1}
  .status{background:#000;padding:4px 12px;border-radius:8px;font-size:13px}
@@ -195,6 +197,7 @@ INDEX_HTML = r"""
   <label id="instrlabel">Instruction</label>
   <div class="row" style="gap:8px"><input type="text" id="instr" style="flex:1" placeholder=""><button id="send" class="green">Send</button></div>
   <div class="hint" id="canon"></div>
+  <div id="examples"></div>
   <div class="row" style="gap:8px;margin-top:16px"><button id="play" class="big" style="flex:2">▶ Play</button><button id="reset" class="alt big" style="flex:1">↻ Reset</button></div>
   <div class="row" style="gap:8px;margin-top:14px;align-items:center"><button id="savevid" class="alt" style="flex:2">💾 Save video</button><label style="margin:0;color:#aaa">speed</label><select id="speed" style="flex:0 0 auto"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select></div>
   <div class="hint">Send a new instruction any time — corrections or staged subgoals. Save video captions the active prompt under each frame.</div>
@@ -220,7 +223,7 @@ function optList(sel){
 }
 function fillOptions(sel){
  const el=$('sel_'+sel.name);
- el.innerHTML=optList(sel).map(o=>{ const v=(typeof o==='string')?o:o.value; const l=(typeof o==='string')?o:(o.label||o.value); const dp=(o&&o.default_prompt)||''; return `<option value="${esc(v)}" data-dp="${esc(dp)}">${esc(l)}</option>`; }).join('');
+ el.innerHTML=optList(sel).map(o=>{ const v=(typeof o==='string')?o:o.value; const l=(typeof o==='string')?o:(o.label||o.value); const dp=(o&&o.default_prompt)||''; const ex=(o&&o.examples)?JSON.stringify(o.examples):'[]'; return `<option value="${esc(v)}" data-dp="${esc(dp)}" data-ex="${esc(ex)}">${esc(l)}</option>`; }).join('');
 }
 function buildSelectors(){
  const wrap=$('selectors'); wrap.innerHTML=''; const lab=document.createElement('label'); lab.textContent=SELS.map(s=>s.label||s.name).join(' · '); wrap.appendChild(lab);
@@ -232,8 +235,15 @@ function buildSelectors(){
  SELS.filter(s=>s.depends_on).forEach(fillOptions);
  showCanon();
 }
-function currentDefaultPrompt(){ const last=SELS[SELS.length-1]; if(!last)return''; const o=($('sel_'+last.name)||{}).selectedOptions; return (o&&o[0])?(o[0].getAttribute('data-dp')||''):''; }
-function showCanon(){ const dp=currentDefaultPrompt(); $('canon').textContent=dp?('default prompt: '+dp):''; }
+function currentOpt(){ const last=SELS[SELS.length-1]; if(!last)return null; const o=($('sel_'+last.name)||{}).selectedOptions; return (o&&o[0])?o[0]:null; }
+function showCanon(){ const o=currentOpt(); const dp=o?(o.getAttribute('data-dp')||''):''; $('canon').textContent=dp?('default prompt: '+dp):'';
+ let ex=[]; try{ ex=JSON.parse(o?(o.getAttribute('data-ex')||'[]'):'[]'); }catch(e){}
+ const box=$('examples');
+ if(ex && ex.length>1){
+  box.innerHTML='<div class="hint" style="margin:8px 0 2px">example tasks trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  const chips=box.querySelectorAll('.chip'); chips.forEach((c,i)=>c.onclick=()=>{ $('instr').value=ex[i]; toast('Prompt set — press Play or Send'); });
+ } else box.innerHTML='';
+}
 
 async function doLoad(){ toast('Loading scene… (paused — press Play)','#d8a657');
  await fetch('/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selection:selection(),instruction:$('instr').value.trim()})}); }
