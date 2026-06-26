@@ -211,7 +211,7 @@ class LiberoWorker(threading.Thread):
         sent = ("%s   (@step %d)" % (s["sent_prompt"], s["sent_step"])) if s["sent_prompt"] \
             else "— nothing sent yet (press Play) —"
         return {
-            "Task": "%s · task %s" % (s["suite"], s["task_id"]),
+            # Suite/scene are shown in the selectors above — don't duplicate.
             "Scene goal": s["task_language"] or "—",
             "Prompt (set)": prompt,
             "→ Sent to policy": sent,
