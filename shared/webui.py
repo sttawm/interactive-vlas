@@ -223,7 +223,8 @@ function optList(sel){
 }
 function fillOptions(sel){
  const el=$('sel_'+sel.name);
- el.innerHTML=optList(sel).map(o=>{ const v=(typeof o==='string')?o:o.value; const l=(typeof o==='string')?o:(o.label||o.value); const dp=(o&&o.default_prompt)||''; const ex=(o&&o.examples)?JSON.stringify(o.examples):'[]'; return `<option value="${esc(v)}" data-dp="${esc(dp)}" data-ex="${esc(ex)}">${esc(l)}</option>`; }).join('');
+ // URL-encode data-dp/data-ex so quotes in prompts/JSON can't break the attribute.
+ el.innerHTML=optList(sel).map(o=>{ const v=(typeof o==='string')?o:o.value; const l=(typeof o==='string')?o:(o.label||o.value); const dp=(o&&o.default_prompt)?encodeURIComponent(o.default_prompt):''; const ex=(o&&o.examples)?encodeURIComponent(JSON.stringify(o.examples)):''; return `<option value="${esc(v)}" data-dp="${dp}" data-ex="${ex}">${esc(l)}</option>`; }).join('');
 }
 function buildSelectors(){
  const wrap=$('selectors'); wrap.innerHTML=''; const lab=document.createElement('label'); lab.textContent=SELS.map(s=>s.label||s.name).join(' · '); wrap.appendChild(lab);
@@ -236,12 +237,14 @@ function buildSelectors(){
  showCanon();
 }
 function currentOpt(){ const last=SELS[SELS.length-1]; if(!last)return null; const o=($('sel_'+last.name)||{}).selectedOptions; return (o&&o[0])?o[0]:null; }
-function showCanon(){ const o=currentOpt(); const dp=o?(o.getAttribute('data-dp')||''):''; $('canon').textContent=dp?('default prompt: '+dp):'';
- let ex=[]; try{ ex=JSON.parse(o?(o.getAttribute('data-ex')||'[]'):'[]'); }catch(e){}
+function showCanon(){ const o=currentOpt();
+ const dpRaw=o?o.getAttribute('data-dp'):''; const dp=dpRaw?decodeURIComponent(dpRaw):'';
+ $('canon').textContent=dp?('default prompt: '+dp):'';
+ let ex=[]; const exRaw=o?o.getAttribute('data-ex'):''; if(exRaw){ try{ ex=JSON.parse(decodeURIComponent(exRaw)); }catch(e){} }
  const box=$('examples');
  if(ex && ex.length>1){
-  box.innerHTML='<div class="hint" style="margin:8px 0 2px">example tasks trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
-  const chips=box.querySelectorAll('.chip'); chips.forEach((c,i)=>c.onclick=()=>{ $('instr').value=ex[i]; toast('Prompt set — press Play or Send'); });
+  box.innerHTML='<div class="hint" style="margin:8px 0 2px">'+ex.length+' tasks trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+  box.querySelectorAll('.chip').forEach((c,i)=>c.onclick=()=>{ $('instr').value=ex[i]; toast('Prompt set — press Play or Send'); });
  } else box.innerHTML='';
 }
 
