@@ -69,6 +69,7 @@ class LiberoWorker(threading.Thread):
         self.client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
         self._benchmark_dict = benchmark.get_benchmark_dict()
         self._task_cache = {}  # suite -> [task language, ...]
+        self._scene_cache = {}  # suite -> [(scene label, [task ids]), ...]
 
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -99,23 +100,39 @@ class LiberoWorker(threading.Thread):
 
     # ----- contract: config / status / control -----
 
+    def _objset(self, task):
+        """The set of manipulable objects in a task's bddl — the true 'scene' key
+        (tasks with identical object sets share a scene)."""
+        txt = (pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file).read_text()
+        m = re.search(r"\(:objects(.*?)\)\s*\(:", txt, re.S) or re.search(r"\(:objects(.*?)\)", txt, re.S)
+        return frozenset(re.findall(r"([a-z_]+_\d+)\s", m.group(1))) if m else frozenset()
+
     def _scene_groups(self, suite):
-        """Ordered [(label, [task_ids])] grouping tasks that share a scene. libero_90/10
-        use the bddl SCENE prefix (verified: same scene == identical object set, so any
-        task loads a scene where all its sibling tasks are valid). Other suites fall back
-        to one task per entry."""
+        """Ordered [(label, [task_ids])] grouping tasks that share a scene, keyed by the
+        bddl object set (verified criterion). Label = the bddl SCENE prefix when present
+        (libero_10/90), else the instruction for a lone task, else 'Scene N'. Cached."""
+        if suite in self._scene_cache:
+            return self._scene_cache[suite]
         ts = self._benchmark_dict[suite]()
         langs = self._task_languages(suite)
-        groups = collections.OrderedDict()
+        groups = collections.OrderedDict()  # objset -> [task_ids]
+        prefix = {}
         for i in range(ts.n_tasks):
-            m = re.match(r"([A-Z][A-Z_]*SCENE\d+)", ts.get_task(i).bddl_file)
-            groups.setdefault(m.group(1) if m else "task_%d" % i, []).append(i)
-        out = []
-        for key, tids in groups.items():
-            if key.startswith("task_") and len(tids) == 1:
-                out.append((langs[tids[0]], tids))  # ungrouped -> label by its instruction
+            t = ts.get_task(i)
+            groups.setdefault(self._objset(t), []).append(i)
+            m = re.match(r"([A-Z][A-Z_]*SCENE\d+)", t.bddl_file)
+            prefix[i] = m.group(1) if m else None
+        out, scene_n = [], 0
+        for tids in groups.values():
+            if prefix[tids[0]]:
+                label = prefix[tids[0]]
+            elif len(tids) == 1:
+                label = langs[tids[0]]
             else:
-                out.append((key, tids))
+                scene_n += 1
+                label = "Scene %d" % scene_n
+            out.append((label, tids))
+        self._scene_cache[suite] = out
         return out
 
     def config(self):

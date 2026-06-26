@@ -242,8 +242,8 @@ function showCanon(){ const o=currentOpt();
  $('canon').textContent=dp?('default prompt: '+dp):'';
  let ex=[]; const exRaw=o?o.getAttribute('data-ex'):''; if(exRaw){ try{ ex=JSON.parse(decodeURIComponent(exRaw)); }catch(e){} }
  const box=$('examples');
- if(ex && ex.length>1){
-  box.innerHTML='<div class="hint" style="margin:8px 0 2px">'+ex.length+' tasks trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+ if(ex && ex.length>=1){
+  box.innerHTML='<div class="hint" style="margin:8px 0 2px">'+ex.length+(ex.length==1?' task':' tasks')+' trained on this scene (click to use):</div>'+ex.map(t=>`<span class="chip">${esc(t)}</span>`).join('');
   box.querySelectorAll('.chip').forEach((c,i)=>c.onclick=()=>{ $('instr').value=ex[i]; toast('Prompt set — press Play or Send'); });
  } else box.innerHTML='';
 }
