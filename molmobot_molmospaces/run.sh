@@ -23,6 +23,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 WEB_PORT="${WEB_PORT:-8888}"
 HOUSE="${HOUSE:-0}"
 SPLIT="${SPLIT:-val}"
+MAX_STEPS="${MAX_STEPS:-3000}"   # auto-pause after N policy steps (Reset to run again)
 EXTRA=()
 [ "${STUB:-0}" = "1" ] && EXTRA+=(--stub)
 [ -n "${CHECKPOINT:-}" ] && EXTRA+=(--checkpoint "$CHECKPOINT")
@@ -30,4 +31,4 @@ EXTRA=()
 echo "Starting interactive web UI on :$WEB_PORT  (house $HOUSE/$SPLIT, repo ${HF_REPO})"
 exec "$MOLMOBOT_VENV/bin/python" "$REPO_DIR/app/interactive_molmospaces.py" \
   --web-port "$WEB_PORT" --house-index "$HOUSE" --split "$SPLIT" \
-  --checkpoint "${CHECKPOINT:-$HF_REPO}" "${EXTRA[@]}"
+  --max-steps "$MAX_STEPS" --checkpoint "${CHECKPOINT:-$HF_REPO}" "${EXTRA[@]}"
