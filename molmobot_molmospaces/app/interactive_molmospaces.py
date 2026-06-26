@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import sys
 import threading
 import time
@@ -262,8 +263,8 @@ class RolloutWorker(threading.Thread):
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
-        self._instruction = args.instruction or ""
-        self._latest_jpeg = _placeholder_jpeg("pick a VLA + scene, then Load")
+        self._instruction = args.instruction or self._scene_default_prompt(args.house_index)
+        self._latest_jpeg = _placeholder_jpeg("pick a VLA + scene")
         self._paused = True
         self._reset_to = {"vla": self._default_vla, "house_index": args.house_index}
         self._force_refresh = False
@@ -273,14 +274,18 @@ class RolloutWorker(threading.Thread):
             "env": ENV_NAME,
             "house": args.house_index,
             "instruction": self._instruction,
+            "sent_prompt": "",
+            "sent_step": 0,
             "step": 0,
             "max_steps": args.max_steps,
             "paused": True,
+            "limit_reached": False,
             "ready": False,
         }
 
         self._record_frames = []
         self._record_actions = []
+        self._record_prompts = []  # prompt active at each recorded frame (for captions)
         self._record_instructions = []
         self._run_dir = None
         self._run_meta = {}
@@ -300,29 +305,44 @@ class RolloutWorker(threading.Thread):
         )
         logger.info("New instruction @step %s: %r", step, text)
 
+    def _scene_default_prompt(self, house_index):
+        # House 0 carries the demo bowl + knife (the verified default); others generic.
+        return "pick up the knife" if house_index == 0 else "pick up an object"
+
     def config(self):
-        scenes = [f"house {i}" for i in range(self.args.num_scenes)]
+        scenes = [{"value": f"house {i}", "label": f"house {i}",
+                   "default_prompt": self._scene_default_prompt(i)}
+                  for i in range(self.args.num_scenes)]
         return {
-            "title": "Interactive VLA Playground · MolmoBot + MolmoSpaces",
-            "vlas": self.available_vlas,
-            "envs": [ENV_NAME],
-            "scenes": {ENV_NAME: scenes},
-            "default": {
-                "vla": self._default_vla,
-                "env": ENV_NAME,
-                "scene": f"house {self.args.house_index}",
-            },
+            "title": "MolmoBot · MolmoSpaces",
+            "selectors": [
+                {"name": "vla", "label": "VLA", "options": self.available_vlas},
+                {"name": "env", "label": "Env", "options": [ENV_NAME]},
+                {"name": "scene", "label": "Scene", "depends_on": "env",
+                 "options_by": {ENV_NAME: scenes}},
+            ],
+            "instruction_label": "Instruction to MolmoBot — blank uses the scene's default",
+            "instruction_placeholder": "e.g. pick up the knife",
         }
 
-    def request_reset(self, selection):
+    def default_prompt(self, selection):
+        house = _house_from_scene(selection.get("scene"), self.args.house_index)
+        return self._scene_default_prompt(house)
+
+    def request_reset(self, selection, instruction=""):
         vla = selection.get("vla") or self._cur_vla
         if vla not in self.available_vlas:
             vla = self._default_vla
         house = _house_from_scene(selection.get("scene"), self.args.house_index)
+        # Resolve the default prompt synchronously and set the prompt now, so a Send
+        # during the (~minute) scene/model load isn't clobbered. Land paused & ready.
+        instruction = (instruction or "").strip()
         with self._lock:
             self._reset_to = {"vla": vla, "house_index": house}
-            self._paused = False
-            self.status["paused"] = False
+            self._instruction = instruction or self._scene_default_prompt(house)
+            self._paused = True
+            self.status["paused"] = True
+            self.status["instruction"] = self._instruction
 
     def _make_policy(self, vla, view):
         if vla == "stub":
@@ -343,7 +363,38 @@ class RolloutWorker(threading.Thread):
 
     def snapshot_status(self):
         with self._lock:
-            return dict(self.status)
+            s = dict(self.status)
+        if not s["ready"]:
+            state = "loading…"
+        elif s["limit_reached"]:
+            state = "⏹ step limit (%d) — Reset" % s["max_steps"]
+        elif s["paused"]:
+            state = "⏸ paused"
+        else:
+            state = "▶ running"
+        prompt = s["instruction"] or "—"
+        if s["instruction"] and s["instruction"] != s["sent_prompt"]:
+            prompt += "   (pending — not executed yet)"
+        sent = ("%s   (@step %d)" % (s["sent_prompt"], s["sent_step"])) if s["sent_prompt"] \
+            else "— nothing sent yet (press Play) —"
+        return {
+            "VLA": s["vla"],
+            "Env": s["env"],
+            "Scene": "house %s" % s["house"],
+            "Prompt (set)": prompt,
+            "→ Sent to policy": sent,
+            "Step": "%d / %d" % (s["step"], s["max_steps"]),
+            "State": state,
+            # consumed by the frontend (Play button + step-limit handling), not displayed:
+            "paused": s["paused"],
+            "limit_reached": s["limit_reached"],
+        }
+
+    def save_video(self, name, speed=1.0):
+        with self._lock:
+            frames = list(self._record_frames)
+            prompts = list(self._record_prompts)
+        return _compose_wide_video(frames, prompts, name, speed, self.args.runs_dir)
 
     def stop(self):
         self._stop.set()
@@ -357,6 +408,7 @@ class RolloutWorker(threading.Thread):
         self._run_dir = run_dir
         self._record_frames = []
         self._record_actions = []
+        self._record_prompts = []
         self._record_instructions = []
         self._run_meta = {
             "house_index": world.house_index,
@@ -436,12 +488,12 @@ class RolloutWorker(threading.Thread):
                         logger.exception("policy.reset() failed (continuing)")
                 step = 0
                 self._start_new_run(world)
+                # The prompt was set synchronously in request_reset (so a Send during
+                # this slow load isn't clobbered) — don't reassign it here.
                 with self._lock:
-                    if not self._instruction:
-                        self._instruction = "pick up an object"
                     self.status.update(
                         vla=vla, house=world.house_index, instruction=self._instruction,
-                        step=0, ready=True,
+                        step=0, sent_prompt="", sent_step=0, limit_reached=False, ready=True,
                     )
                 self._record_instructions.append(
                     [datetime.datetime.now().isoformat(timespec="seconds"), 0, self._instruction]
@@ -453,6 +505,7 @@ class RolloutWorker(threading.Thread):
                 if world is not None and step >= self.args.max_steps:
                     with self._lock:
                         self.status["paused"] = True
+                        self.status["limit_reached"] = True
                     self._paused = True
                 time.sleep(0.05)
                 continue
@@ -461,9 +514,13 @@ class RolloutWorker(threading.Thread):
                 if force_refresh:
                     self._do_force_refresh()
                 obs = world.obs(instruction)
+                with self._lock:
+                    self.status["sent_prompt"] = str(instruction)  # ground truth: obs["task"]
+                    self.status["sent_step"] = step + 1
                 action = self._policy.get_action(obs)
                 self._record_frames.append(_stack(obs))
                 self._record_actions.append({k: np.asarray(v) for k, v in action.items()})
+                self._record_prompts.append(str(instruction))
                 world.apply(action)
                 step += 1
                 self._publish_frame(world, instruction, step)
@@ -522,6 +579,38 @@ def _placeholder_jpeg(text):
     cv2.putText(img, text, (20, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
     ok, buf = cv2.imencode(".jpg", img)
     return buf.tobytes()
+
+
+def _compose_wide_video(frames, prompts, name, speed=1.0, runs_dir="runs"):
+    """Captioned, speed-adjustable export of the dual-cam (wide) rollout. Keeps the
+    native frame aspect (shared.webui.compose_video assumes square) and captions the
+    active prompt below each frame. Returns the mp4 path, or None if no frames."""
+    frames = list(frames)
+    if not frames:
+        return None
+    prompts = list(prompts)
+    if len(prompts) < len(frames):
+        prompts += [prompts[-1] if prompts else ""] * (len(frames) - len(prompts))
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("_") or "video"
+    vid_dir = pathlib.Path(runs_dir) / "videos"
+    vid_dir.mkdir(parents=True, exist_ok=True)
+    path = vid_dir / (safe + ".mp4")
+    h, w = np.asarray(frames[0]).shape[:2]
+    cap_h, font = 40, cv2.FONT_HERSHEY_SIMPLEX
+    fps = max(1, int(round(15 * float(speed))))  # MolmoBot runs ~15 Hz
+    writer = imageio.get_writer(str(path), fps=fps, macro_block_size=None)
+    try:
+        for img, prompt in zip(frames, prompts):
+            canvas = np.zeros((h + cap_h, w, 3), dtype=np.uint8)
+            canvas[:h] = np.asarray(img)[:, :, :3]
+            label = prompt or "—"
+            if len(label) > 110:
+                label = label[:107] + "..."
+            cv2.putText(canvas, label, (8, h + 27), font, 0.6, (240, 240, 240), 1, cv2.LINE_AA)
+            writer.append_data(canvas)
+    finally:
+        writer.close()
+    return path
 
 
 def main():
