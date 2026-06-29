@@ -305,6 +305,12 @@ class LiberoWorker(threading.Thread):
                     env.reset()
                     init_id = max(0, min(init_id, len(init_states) - 1))
                     obs = env.set_init_state(init_states[init_id])
+                    # IMPORTANT (matches the benchmark eval): LIBERO drops objects at
+                    # episode start, so step a no-op (gripper open) for num_steps_wait to
+                    # let them settle before the policy acts. Without this the policy sees
+                    # a falling, out-of-distribution scene and performs much worse.
+                    for _ in range(self.args.num_steps_wait):
+                        obs, _, _, _ = env.step(LIBERO_DUMMY_ACTION)
                 except Exception:
                     logger.exception("env load failed")
                     env = None
@@ -412,6 +418,8 @@ def main():
     p.add_argument("--web-port", type=int, default=8888, help="web UI port")
     p.add_argument("--replan-steps", type=int, default=5)
     p.add_argument("--max-rollout-steps", type=int, default=5000)
+    p.add_argument("--num-steps-wait", type=int, default=10,
+                   help="no-op steps after reset to let LIBERO objects settle (matches the benchmark)")
     p.add_argument("--resize-size", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--runs-dir", default="runs")
