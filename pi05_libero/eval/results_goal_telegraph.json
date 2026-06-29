@@ -1,0 +1,102 @@
+{
+  "suite": "libero_goal",
+  "trials": 5,
+  "tasks": 10,
+  "summary_pct": {
+    "canonical": 96.0,
+    "paraphrase": 70.0
+  },
+  "per_task": [
+    {
+      "task_id": 0,
+      "canonical": "open the middle drawer of the cabinet",
+      "paraphrase": "middle drawer",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "5/5"
+      }
+    },
+    {
+      "task_id": 1,
+      "canonical": "put the bowl on the stove",
+      "paraphrase": "bowl stove",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "4/5"
+      }
+    },
+    {
+      "task_id": 2,
+      "canonical": "put the wine bottle on top of the cabinet",
+      "paraphrase": "wine bottle cabinet",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "4/5"
+      }
+    },
+    {
+      "task_id": 3,
+      "canonical": "open the top drawer and put the bowl inside",
+      "paraphrase": "top drawer bowl",
+      "success": {
+        "canonical": "4/5",
+        "paraphrase": "3/5"
+      }
+    },
+    {
+      "task_id": 4,
+      "canonical": "put the bowl on top of the cabinet",
+      "paraphrase": "bowl cabinet",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "4/5"
+      }
+    },
+    {
+      "task_id": 5,
+      "canonical": "push the plate to the front of the stove",
+      "paraphrase": "plate stove",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "0/5"
+      }
+    },
+    {
+      "task_id": 6,
+      "canonical": "put the cream cheese in the bowl",
+      "paraphrase": "cream cheese bowl",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "3/5"
+      }
+    },
+    {
+      "task_id": 7,
+      "canonical": "turn on the stove",
+      "paraphrase": "stove",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "4/5"
+      }
+    },
+    {
+      "task_id": 8,
+      "canonical": "put the bowl on the plate",
+      "paraphrase": "bowl plate",
+      "success": {
+        "canonical": "4/5",
+        "paraphrase": "4/5"
+      }
+    },
+    {
+      "task_id": 9,
+      "canonical": "put the wine bottle on the rack",
+      "paraphrase": "wine bottle rack",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "4/5"
+      }
+    }
+  ],
+  "when": "2026-06-29T23:10:08"
+}
