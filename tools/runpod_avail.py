@@ -31,7 +31,9 @@ def query(dcs):
     q = "query {\n" + "\n".join(aliases) + "\n}"
     req = urllib.request.Request(
         GQL, data=json.dumps({"query": q}).encode(),
-        headers={"Content-Type": "application/json"})
+        headers={"Content-Type": "application/json",
+                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"})
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.load(r)["data"]
 
