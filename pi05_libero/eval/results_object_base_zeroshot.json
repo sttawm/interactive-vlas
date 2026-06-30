@@ -1,0 +1,91 @@
+{
+  "suite": "libero_object",
+  "trials": 3,
+  "tasks": 10,
+  "summary_pct": {
+    "canonical": 0.0
+  },
+  "per_task": [
+    {
+      "task_id": 0,
+      "canonical": "pick up the alphabet soup and place it in the basket",
+      "paraphrase": "pick up the alphabet soup and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 1,
+      "canonical": "pick up the cream cheese and place it in the basket",
+      "paraphrase": "pick up the cream cheese and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 2,
+      "canonical": "pick up the salad dressing and place it in the basket",
+      "paraphrase": "pick up the salad dressing and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 3,
+      "canonical": "pick up the bbq sauce and place it in the basket",
+      "paraphrase": "pick up the bbq sauce and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 4,
+      "canonical": "pick up the ketchup and place it in the basket",
+      "paraphrase": "pick up the ketchup and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 5,
+      "canonical": "pick up the tomato sauce and place it in the basket",
+      "paraphrase": "pick up the tomato sauce and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 6,
+      "canonical": "pick up the butter and place it in the basket",
+      "paraphrase": "pick up the butter and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 7,
+      "canonical": "pick up the milk and place it in the basket",
+      "paraphrase": "pick up the milk and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 8,
+      "canonical": "pick up the chocolate pudding and place it in the basket",
+      "paraphrase": "pick up the chocolate pudding and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 9,
+      "canonical": "pick up the orange juice and place it in the basket",
+      "paraphrase": "pick up the orange juice and place it in the basket",
+      "success": {
+        "canonical": "0/3"
+      }
+    }
+  ],
+  "when": "2026-06-30T18:59:11"
+}

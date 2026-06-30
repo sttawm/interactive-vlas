@@ -1,0 +1,91 @@
+{
+  "suite": "libero_goal",
+  "trials": 3,
+  "tasks": 10,
+  "summary_pct": {
+    "canonical": 0.0
+  },
+  "per_task": [
+    {
+      "task_id": 0,
+      "canonical": "open the middle drawer of the cabinet",
+      "paraphrase": "open the middle drawer of the cabinet",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 1,
+      "canonical": "put the bowl on the stove",
+      "paraphrase": "put the bowl on the stove",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 2,
+      "canonical": "put the wine bottle on top of the cabinet",
+      "paraphrase": "put the wine bottle on top of the cabinet",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 3,
+      "canonical": "open the top drawer and put the bowl inside",
+      "paraphrase": "open the top drawer and put the bowl inside",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 4,
+      "canonical": "put the bowl on top of the cabinet",
+      "paraphrase": "put the bowl on top of the cabinet",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 5,
+      "canonical": "push the plate to the front of the stove",
+      "paraphrase": "push the plate to the front of the stove",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 6,
+      "canonical": "put the cream cheese in the bowl",
+      "paraphrase": "put the cream cheese in the bowl",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 7,
+      "canonical": "turn on the stove",
+      "paraphrase": "turn on the stove",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 8,
+      "canonical": "put the bowl on the plate",
+      "paraphrase": "put the bowl on the plate",
+      "success": {
+        "canonical": "0/3"
+      }
+    },
+    {
+      "task_id": 9,
+      "canonical": "put the wine bottle on the rack",
+      "paraphrase": "put the wine bottle on the rack",
+      "success": {
+        "canonical": "0/3"
+      }
+    }
+  ],
+  "when": "2026-06-30T18:48:07"
+}
