@@ -86,6 +86,7 @@ def main():
     p.add_argument("--suite", default="libero_goal")
     p.add_argument("--trials", type=int, default=5, help="rollouts per task (benchmark uses 50)")
     p.add_argument("--max-tasks", type=int, default=0, help="0 = all tasks in the suite")
+    p.add_argument("--task-ids", default="", help="comma-separated task ids; overrides --max-tasks")
     p.add_argument("--prompt-mode", choices=["canonical", "paraphrase", "both"], default="canonical")
     p.add_argument("--paraphrases", default="", help="JSON {canonical_instruction: paraphrase}")
     p.add_argument("--settle", type=int, default=10)
@@ -102,12 +103,17 @@ def main():
 
     client = _wcp.WebsocketClientPolicy(args.host, args.port)
     suite = benchmark.get_benchmark_dict()[args.suite]()
-    n = suite.n_tasks if args.max_tasks <= 0 else min(args.max_tasks, suite.n_tasks)
+    if args.task_ids.strip():
+        task_ids = [int(x) for x in args.task_ids.split(",") if x.strip() != ""]
+    else:
+        n_all = suite.n_tasks if args.max_tasks <= 0 else min(args.max_tasks, suite.n_tasks)
+        task_ids = list(range(n_all))
+    n = len(task_ids)
     max_steps = MAX_STEPS.get(args.suite, 300)
 
     totals = {m: [0, 0] for m in modes}   # mode -> [successes, trials]
     per_task = []
-    for tid in range(n):
+    for tid in task_ids:
         task = suite.get_task(tid)
         canon = str(task.language)
         bddl = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
