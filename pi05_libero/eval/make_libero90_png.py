@@ -8,7 +8,7 @@ ROWS = [
     ("New receptacle  —  known object → new target (tray, cabinet shelf)", "13", "41.5%", "27/65", 41.5),
     ("New scene / arrangement  —  same object + action, new scene/layout", "59", "34.9%", "103/295", 34.9),
     ("New action  —  “turn off the stove” (never trained; only turn-on was)", "1", "0%", "0/5", 0.0),
-    ("New object  —  frying pan, white bowl, red mug, yellow book, white cabinet", "17", "0%", "0/85", 0.0),
+    ("New object  —  frying pan, white bowl, red mug, yellow book, salad dressing", "17", "0%", "0/85", 0.0),
 ]
 TOTAL = ("Held-out total  (all of LIBERO-90)", "90", "28.9%", "130/450", None)
 REFROW = ("In-distribution reference  (the 40 finetuning tasks)", "40", "~96%", "—", None)
