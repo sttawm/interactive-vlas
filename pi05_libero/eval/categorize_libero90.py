@@ -53,20 +53,25 @@ def parse_task(task):
         region2tgt[rname] = rbody
 
     def resolve(tok):
-        seen = set()
-        while tok and tok not in seen:
-            seen.add(tok)
+        # 1) direct instance/fixture, following region -> (:target ...) links
+        for _ in range(5):
             if tok in inst2cat:
                 return inst2cat[tok]
             if tok in region2tgt:
                 tok = region2tgt[tok]
                 continue
-            t2 = re.sub(r"_\d+$", "", tok)        # strip a trailing instance id
-            if t2 != tok:
-                tok = t2
-                continue
             break
-        return tok  # cleaned fallback (e.g. a region whose target we couldn't follow)
+        # 2) longest instance/fixture name that is a prefix of the token, e.g.
+        #    "wooden_cabinet_1_bottom_region" -> "wooden_cabinet_1" -> wooden_cabinet;
+        #    "desk_caddy_1_front_contain_region" -> "desk_caddy_1" -> desk_caddy
+        best = None
+        for k in inst2cat:
+            if tok == k or tok.startswith(k + "_"):
+                if best is None or len(k) > len(best):
+                    best = k
+        if best:
+            return inst2cat[best]
+        return re.sub(r"_\d+$", "", tok)  # cleaned fallback
 
     preds, moved, targets = set(), set(), set()
     for name, args in PRED_RE.findall(_section(txt, "(:goal")):
