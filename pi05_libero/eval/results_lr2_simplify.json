@@ -1,0 +1,57 @@
+{
+  "suite": "libero_90",
+  "trials": 5,
+  "tasks": 5,
+  "summary_pct": {
+    "canonical": 60.0,
+    "paraphrase": 60.0
+  },
+  "per_task": [
+    {
+      "task_id": 50,
+      "canonical": "pick up the alphabet soup and put it in the basket",
+      "paraphrase": "put the alphabet soup in the basket",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "5/5"
+      }
+    },
+    {
+      "task_id": 51,
+      "canonical": "pick up the butter and put it in the basket",
+      "paraphrase": "put the butter in the basket",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "5/5"
+      }
+    },
+    {
+      "task_id": 52,
+      "canonical": "pick up the milk and put it in the basket",
+      "paraphrase": "put the milk in the basket",
+      "success": {
+        "canonical": "0/5",
+        "paraphrase": "0/5"
+      }
+    },
+    {
+      "task_id": 53,
+      "canonical": "pick up the orange juice and put it in the basket",
+      "paraphrase": "put the orange juice in the basket",
+      "success": {
+        "canonical": "0/5",
+        "paraphrase": "0/5"
+      }
+    },
+    {
+      "task_id": 54,
+      "canonical": "pick up the tomato sauce and put it in the basket",
+      "paraphrase": "put the tomato sauce in the basket",
+      "success": {
+        "canonical": "5/5",
+        "paraphrase": "5/5"
+      }
+    }
+  ],
+  "when": "2026-06-30T00:57:23"
+}
