@@ -94,6 +94,8 @@ def main():
     p.add_argument("--resize", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--out", default="")
+    p.add_argument("--resume", action="store_true",
+                   help="if --out exists, skip tasks already recorded and continue")
     args = p.parse_args()
 
     para = {}
@@ -113,7 +115,37 @@ def main():
 
     totals = {m: [0, 0] for m in modes}   # mode -> [successes, trials]
     per_task = []
+    done_ids = set()
+    # Resume: re-seed totals from any tasks already recorded in the out file.
+    if args.resume and args.out and os.path.exists(args.out):
+        prev = json.load(open(args.out))
+        per_task = prev.get("per_task", [])
+        for r in per_task:
+            done_ids.add(r["task_id"])
+            for m, sc in r.get("success", {}).items():
+                if m in totals:
+                    k, t = (int(x) for x in sc.split("/"))
+                    totals[m][0] += k
+                    totals[m][1] += t
+        print("[resume] %d tasks already in %s — skipping them" % (len(done_ids), args.out))
+
+    def write_out():
+        if not args.out:
+            return
+        summ = {}
+        for m in modes:
+            s, t = totals[m]
+            summ[m] = round(100.0 * s / t, 1) if t else 0.0
+        tmp = args.out + ".tmp"
+        json.dump({"suite": args.suite, "trials": args.trials, "tasks": len(per_task),
+                   "summary_pct": summ, "per_task": sorted(per_task, key=lambda r: r["task_id"]),
+                   "when": datetime.datetime.now().isoformat(timespec="seconds")},
+                  open(tmp, "w"), indent=2)
+        os.replace(tmp, args.out)   # atomic: a crash mid-write can't corrupt results
+
     for tid in task_ids:
+        if tid in done_ids:
+            continue
         task = suite.get_task(tid)
         canon = str(task.language)
         bddl = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
@@ -135,20 +167,15 @@ def main():
         row = {"task_id": tid, "canonical": canon, "paraphrase": prompts["paraphrase"],
                "success": {m: "%d/%d" % (succ[m], args.trials) for m in modes}}
         per_task.append(row)
+        write_out()   # incremental: results survive a pause/crash after every task
         print("task %2d  %s  | %s" % (tid, "  ".join("%s %d/%d" % (m, succ[m], args.trials) for m in modes), canon[:50]))
 
-    print("\n=== %s · %d tasks · %d trials/task ===" % (args.suite, n, args.trials))
-    summary = {}
+    print("\n=== %s · %d tasks · %d trials/task ===" % (args.suite, len(per_task), args.trials))
     for m in modes:
         s, t = totals[m]
-        summary[m] = round(100.0 * s / t, 1) if t else 0.0
-        print("  %-11s success: %.1f%%  (%d/%d)" % (m, summary[m], s, t))
-
+        print("  %-11s success: %.1f%%  (%d/%d)" % (m, round(100.0 * s / t, 1) if t else 0.0, s, t))
+    write_out()
     if args.out:
-        json.dump({"suite": args.suite, "trials": args.trials, "tasks": n,
-                   "summary_pct": summary, "per_task": per_task,
-                   "when": datetime.datetime.now().isoformat(timespec="seconds")},
-                  open(args.out, "w"), indent=2)
         print("saved %s" % args.out)
 
 
