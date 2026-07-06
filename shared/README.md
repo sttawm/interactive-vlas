@@ -48,6 +48,8 @@ save_video(name, speed) -> path | None             # optional; enables the Save-
 ## Status
 
 - [`pi05_libero/`](../pi05_libero/) — ✅ on this contract (reference implementation).
+- [`pi0_simpler/`](../pi0_simpler/) — ✅ on this contract (π0-Bridge + SimplerEnv, in-process;
+  `suite → task` selectors, optional CoVer-verifier status rows).
 - [`molmobot_molmospaces/`](../molmobot_molmospaces/) — needs migration from the old
   `{vlas, envs, scenes}` config to the `selectors` config + `request_reset(selection,
   instruction)` + optional `save_video`. The frontend, status rendering, play/pause, and

@@ -41,8 +41,13 @@ openpi-ref/
 # Native MolmoSpaces / MolmoAct2 stack: external clones with their own .git
 molmo/
 
+# CoVer clone (π0-Bridge + SimplerEnv; real install lives on the GPU pod at /workspace)
+cover-vla/
+
 # Machine-specific paths written by each instance's setup.sh
 **/.openpi_env
+**/.cover_env
+**/.molmobot_env
 
 # Rollout artifacts: keep instructions.txt + metadata.json, drop heavy media
 **/runs/**/*.mp4

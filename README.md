@@ -14,6 +14,7 @@ Each VLA+env pairing is a self-contained instance with its own `setup.sh`, `run.
 | Instance | Policy | Environment | Status |
 |----------|--------|-------------|--------|
 | [`pi05_libero/`](pi05_libero/) | π0.5 (OpenPI) | LIBERO | ✅ working |
+| [`pi0_simpler/`](pi0_simpler/) | π0 (rephrase-finetuned, Bridge) | SimplerEnv (SAPIEN/WidowX) | 🚧 code complete; GPU-pod validation pending |
 | [`molmobot_molmospaces/`](molmobot_molmospaces/) | MolmoBot | MolmoSpaces (MuJoCo) | 🚧 shared UI + rig CPU-validated; GPU run pending |
 | [`molmoact2_maniskill/`](molmoact2_maniskill/) | MolmoAct2 | ManiSkill | 🗓️ planned |
 | [`molmoact2_molmospaces/`](molmoact2_molmospaces/) | MolmoAct2 | MolmoSpaces (MuJoCo) | 🗓️ planned |
