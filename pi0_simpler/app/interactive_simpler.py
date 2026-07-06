@@ -134,7 +134,7 @@ class SimplerWorker(threading.Thread):
             "suite": next(iter(SUITES)), "task": "", "task_language": "", "instruction": "",
             "sent_prompt": "", "step": 0, "step_limit": args.max_rollout_steps,
             "paused": True, "limit_reached": False, "success": False, "connected": False,
-            "verifier": bool(args.verifier), "vscore": None, "selected": "",
+            "verifier": bool(args.verifier), "vscore": None, "selected": "", "phrase_scores": [],
         }
         self._record_frames = []
         self._record_prompts = []
@@ -224,6 +224,14 @@ class SimplerWorker(threading.Thread):
             out["Score"] = "%.3f" % s["vscore"]
             if s["selected"]:
                 out["Selected"] = s["selected"] if len(s["selected"]) < 48 else s["selected"][:45] + "…"
+            # Per-phrase verifier scores (best first); the ➤ marks the executed phrase. Only
+            # interesting when >1 phrase was scored (verifier ran over rephrases).
+            ps = s.get("phrase_scores") or []
+            if len(ps) > 1:
+                for rank, (phrase, score) in enumerate(ps, 1):
+                    mark = "➤" if phrase == s["selected"] else "  "
+                    label = phrase if len(phrase) < 44 else phrase[:41] + "…"
+                    out["%s %d. %s" % (mark, rank, label)] = "%.3f" % score
         return out
 
     def save_video(self, name, speed=1.0):
@@ -483,8 +491,10 @@ class SimplerWorker(threading.Thread):
                                     action_ensemble_temp=self.args.action_ensemble_temp)
 
     def _infer_verifier(self, action_plan, img_t, state_t, raw_img, instruction):
-        """CoVer loop: sample B actions per prompt over the prompt + its rephrases, score with the
-        verifier, pick the best; port of run_simpler_eval_with_openpi.py's verifier branch."""
+        """CoVer loop: sample B actions per prompt over the prompt + its rephrases, score EACH
+        phrase with the verifier, pick the best. Ports the mechanics of run_simpler_eval_with_openpi.py's
+        verifier branch (process_inputs, gripper voting, action-chunk carry) but scores per phrase —
+        rather than the paper's original-first shortcut — so every phrase's score can be shown live."""
         B = int(self.args.policy_batch_inference_size)
         base = str(instruction)
         rephrases = self._rephrases_for(base)
@@ -508,21 +518,28 @@ class SimplerWorker(threading.Thread):
             num_past = min(len(self._action_history), 6)
             hist = self._process_inputs(batch_size, predefined, verifier_action=True,
                                         action_history=list(self._action_history), cfg=self.args)
-            images_list = [self._process_raw_image_to_jpg(raw_img)] * batch_size
-            with self._torch.no_grad():
-                max_score, _sel, max_hist, gidx = self._verifier.compute_max_similarity_scores_batch(
-                    images=images_list[0:1], instructions=[base],
-                    all_action_histories=hist[0:1], cfg_repeat_language_instructions=1)
-                if max_score < 0.1 and batch_size > 1:
-                    max_score, _sel, max_hist, gidx = self._verifier.compute_max_similarity_scores_batch(
-                        images=images_list, instructions=[base] * batch_size,
-                        all_action_histories=hist, cfg_repeat_language_instructions=B)
-            selected = task_list[gidx]
-
             exec_hist = self._process_inputs(batch_size, predefined, verifier_action=False,
                                              action_history=list(self._action_history), cfg=self.args)
+            img_jpg = self._process_raw_image_to_jpg(raw_img)
+
+            # Score each phrase's B action samples separately → one score per phrase.
+            phrase_scores = []                 # [(phrase, best_score)]
+            best = None                        # (score, global_idx, action_history_for_verifier, phrase)
+            for i, prompt in enumerate(unique_prompts):
+                s0 = i * B
+                with self._torch.no_grad():
+                    score, _sel, ahist, local_idx = self._verifier.compute_max_similarity_scores_batch(
+                        images=[img_jpg] * B, instructions=[prompt] * B,
+                        all_action_histories=hist[s0:s0 + B], cfg_repeat_language_instructions=B)
+                score = float(score)
+                gidx = s0 + int(local_idx)
+                phrase_scores.append((prompt, score))
+                if best is None or score > best[0]:
+                    best = (score, gidx, ahist, prompt)
+
+            best_score, gidx, max_hist, selected = best
             execute_action = exec_hist[gidx][num_past].copy()
-            # gripper voting within the selected prompt's B samples
+            # gripper voting within the selected phrase's B samples
             gstart = (gidx // B) * B
             grippers = np.stack(exec_hist[gstart:gstart + B])[:, num_past, -1]
             close_votes, open_votes = int((grippers >= 0).sum()), int((grippers < 0).sum())
@@ -537,8 +554,9 @@ class SimplerWorker(threading.Thread):
             for ts in range(1, int(self.args.n_action_steps)):
                 action_plan.append(predefined[ts][gidx:gidx + 1])
             with self._lock:
-                self._st["vscore"] = float(max_score)
+                self._st["vscore"] = best_score
                 self._st["selected"] = selected
+                self._st["phrase_scores"] = sorted(phrase_scores, key=lambda x: -x[1])
             return execute_action
 
         single = action_plan.popleft().detach().cpu().numpy()  # (1,7)

@@ -83,8 +83,10 @@ downloads/venv build) then `run.sh`, in a detached tmux `boot` session.
   reworded instruction changes behavior.
 - **Verifier (`VERIFIER=1 ./run.sh`):** the **CoVer** loop — π0 samples several actions across
   your prompt **and rephrases of it**, the verifier scores them, and the best prompt+action is
-  auto-selected. The Status panel shows the verifier **Score** and the **Selected** instruction
-  (which can differ from what you typed — that's the verifier steering).
+  auto-selected. The Status panel shows the verifier **Score**, the **Selected** instruction
+  (which can differ from what you typed — that's the verifier steering), and a **ranked list of
+  every phrase with its score** (best first; ➤ marks the executed one) so you can see the
+  verifier's decision, not just its output.
   - Rephrases come from the paper's shipped `ert_rephrases` JSON when your prompt matches one of
     the canonical task instructions; for a **custom** prompt they're generated live via Claude
     (needs `ANTHROPIC_API_KEY`; falls back to just your prompt if unset). Set `REPHRASE_MODEL`
