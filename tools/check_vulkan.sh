@@ -26,25 +26,35 @@ fi
 
 echo "== vulkaninfo =="
 out="$(vulkaninfo --summary 2>&1)"
-dev="$(printf '%s\n' "$out" | grep -i 'deviceName' | head -1 | sed 's/.*=[[:space:]]*//')"
-if [ -n "$dev" ]; then
-  echo "✅ PASS — Vulkan sees a GPU: $dev"
+# Require a HARDWARE GPU. Reject the CPU software fallback (llvmpipe / lavapipe / swiftshader):
+# it makes vulkaninfo "succeed" but SAPIEN would run on CPU (unusably slow) or crash on missing
+# features. A real device has deviceType != PHYSICAL_DEVICE_TYPE_CPU.
+hw_gpu="$(printf '%s\n' "$out" | grep -i 'deviceName' | grep -viE 'llvmpipe|lavapipe|swiftshader|software' | head -1 | sed 's/.*=[[:space:]]*//')"
+has_hw="$(printf '%s\n' "$out" | grep -i 'deviceType' | grep -viE 'CPU' | head -1)"
+if [ -n "$hw_gpu" ] && [ -n "$has_hw" ]; then
+  echo "✅ PASS — Vulkan sees a hardware GPU: $hw_gpu"
   echo "   SimplerEnv/SAPIEN should render on this pod. Proceed with ./pi0_simpler/setup.sh"
   exit 0
 fi
+if printf '%s\n' "$out" | grep -qiE 'llvmpipe|lavapipe|swiftshader'; then
+  echo "  ⚠️  Only a CPU software renderer (llvmpipe) is available — NOT the GPU."
+fi
 
-printf '%s\n' "$out" | tail -12 | sed 's/^/  /'
+printf '%s\n' "$out" | tail -6 | sed 's/^/  /'
 cat <<'EOF'
 
-❌ FAIL — no Vulkan device found. SimplerEnv/SAPIEN will NOT render here.
-   nvidia-smi / CUDA can work fine while Vulkan does not — they're separate.
+❌ FAIL — no *hardware* Vulkan device. SimplerEnv/SAPIEN will NOT render usably here.
+   nvidia-smi / CUDA can work fine while GPU Vulkan does not — they're separate stacks.
 
-   Most common RunPod cause: the container lacks the 'graphics' driver capability.
-   Fix: recreate the pod with the environment variable
+   Fixes, in order of likelihood on RunPod:
+   1) Missing 'graphics' capability (no nvidia_icd.json under /etc/vulkan/icd.d or
+      /usr/share/vulkan/icd.d): recreate the pod with the environment variable
         NVIDIA_DRIVER_CAPABILITIES=all        (or: compute,utility,graphics)
-
-   If the driver ships its ICD at a nonstandard path, point the loader at it:
-        export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
-   (find it with:  find / -name 'nvidia_icd*.json' 2>/dev/null )
+   2) Driver refuses the Vulkan instance ("vkCreateInstance: Found no drivers!") even though
+      the NVIDIA libs/ICD are present → the GPU's graphics engine isn't exposed to this
+      container. This is a HOST-level config; it usually can't be fixed from inside the pod.
+      Terminate and redeploy on a different host/template, then re-run this check FIRST.
+   3) Nonstandard ICD path: export VK_ICD_FILENAMES=/path/to/nvidia_icd.json
+      (find it:  find / -name 'nvidia_icd*.json' 2>/dev/null )
 EOF
 exit 1
