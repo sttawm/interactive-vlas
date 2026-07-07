@@ -42,6 +42,21 @@ if [ "${SKIP_APT:-0}" != "1" ] && command -v apt-get >/dev/null 2>&1; then
     >/dev/null 2>&1 || echo "  (apt install failed — install libvulkan1/libx11-6/tmux manually if needed)"
 fi
 
+# --- 0a. Vulkan preflight (fail fast before the ~20 min build) --------------
+# SimplerEnv/SAPIEN renders through Vulkan; a pod without it can't run this viewer at all.
+if [ "${SKIP_VULKAN_CHECK:-0}" != "1" ]; then
+  step "0a  Vulkan preflight (SimplerEnv/SAPIEN requires it)"
+  if bash "$REPO_DIR/../tools/check_vulkan.sh"; then
+    :
+  else
+    echo ""
+    echo "  ⚠️  Vulkan is not available on this pod (see the fix above)."
+    echo "     The build can continue, but rendering WILL fail until Vulkan works."
+    echo "     Set VULKAN_REQUIRED=1 to abort here instead; SKIP_VULKAN_CHECK=1 to skip this check."
+    [ "${VULKAN_REQUIRED:-0}" = "1" ] && { echo "  Aborting (VULKAN_REQUIRED=1)."; exit 1; }
+  fi
+fi
+
 # CoVer's env_simpler_pi.sh calls `sudo apt-get`; on a root pod without sudo that aborts (set -e).
 # Provide a passthrough `sudo` shim so it just runs the command as-is.
 export PATH="$HOME/.local/bin:$PATH"

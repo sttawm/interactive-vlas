@@ -143,12 +143,17 @@ uses the paper's sampling (`noise_std=1`, batch × rephrases).
 
 ## Troubleshooting
 
-- **SAPIEN / Vulkan render failures** (`No Vulkan extensions found…`, blank/black frames): this is
-  the SimplerEnv-on-a-pod snag. SimplerEnv's WidowX rendering needs a working **Vulkan ICD**. Make
-  sure `libvulkan1` is installed (setup does this) and the NVIDIA ICD is present — `vulkaninfo`
-  should list your GPU. If your pod exposes an NVIDIA ICD at a nonstandard path, set
-  `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/nvidia_icd.json`. The `setup.sh` render smoke test
-  tells you immediately whether this pod can render.
+- **Is Vulkan even available? Check before you build.** Run `bash tools/check_vulkan.sh` on the pod
+  — it prints your GPU name on success, or the fix on failure. `setup.sh` runs this automatically as
+  a fail-fast preflight (skip with `SKIP_VULKAN_CHECK=1`, hard-abort with `VULKAN_REQUIRED=1`).
+  **`nvidia-smi` working does NOT mean Vulkan works** — CUDA and Vulkan are separate.
+- **SAPIEN / Vulkan render failures** (`No Vulkan extensions found…`, blank/black frames, or
+  `check_vulkan.sh` FAILs): SimplerEnv's WidowX rendering needs a working **NVIDIA Vulkan ICD**, and
+  the container only gets it when the pod has the **`graphics`** driver capability. The usual RunPod
+  fix is to recreate the pod with the env var **`NVIDIA_DRIVER_CAPABILITIES=all`** (or
+  `compute,utility,graphics`). Make sure `nvidia_icd.json` exists under `/usr/share/vulkan/icd.d/`;
+  if the driver ships it elsewhere, `export VK_ICD_FILENAMES=/path/to/nvidia_icd.json`. The
+  `setup.sh` render smoke test (step 5) re-confirms end-to-end that a real WidowX scene renders.
 - **OOM:** π0 + SAPIEN share the GPU; the verifier adds a second model + batched sampling. Lower
   `BATCH` / `LANG_REPHRASE_NUM`, or run plain (no `VERIFIER=1`).
 - **Blank/frozen video over the RunPod proxy:** the UI polls frames; a frozen frame usually means
