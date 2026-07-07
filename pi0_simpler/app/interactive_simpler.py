@@ -142,6 +142,9 @@ class SimplerWorker(threading.Thread):
         self._run_dir = None
         self._run_meta = {}
         self._action_history = []  # verifier past-action buffer (reset per episode / on replan)
+        self._env = None           # latest env + obs, mirrored so score_phrases can read them
+        self._obs = None
+        self._gpu_lock = threading.Lock()  # serialize policy/verifier use across the two threads
 
     # ----- contract: config / status / control -----
 
@@ -167,6 +170,8 @@ class SimplerWorker(threading.Thread):
             ],
             "instruction_label": "Instruction to π0 — blank uses the task's default",
             "instruction_placeholder": "e.g. put the spoon on the towel",
+            # Advertise the "Generate & score phrases" button (verifier-only capability).
+            "score_phrases": bool(self.args.verifier),
         }
 
     def default_prompt(self, selection):
@@ -391,6 +396,7 @@ class SimplerWorker(threading.Thread):
                                     instruction=self._instruction, step=0, sent_prompt="",
                                     success=False, limit_reached=False, connected=True,
                                     vscore=None, selected="")
+                    self._env, self._obs = env, obs
                 self._publish_frame(obs, env, self._instruction)
                 continue
 
@@ -408,6 +414,8 @@ class SimplerWorker(threading.Thread):
             try:
                 obs, done, trunc = self._step_once(env, obs, action_plan, instruction, step)
                 step += 1
+                with self._lock:
+                    self._obs = obs
             except Exception:
                 logger.exception("step failed; pausing")
                 self.set_paused(True)
@@ -459,10 +467,11 @@ class SimplerWorker(threading.Thread):
         img_t = img_t.to(dev) if hasattr(img_t, "to") else img_t
         state_t = state_t.to(dev) if hasattr(state_t, "to") else state_t
 
-        if self.args.verifier:
-            execute_action = self._infer_verifier(action_plan, img_t, state_t, raw_img, instruction)
-        else:
-            execute_action = self._infer_plain(action_plan, img_t, state_t, instruction)
+        with self._gpu_lock:  # don't run the policy/verifier concurrently with score_phrases()
+            if self.args.verifier:
+                execute_action = self._infer_verifier(action_plan, img_t, state_t, raw_img, instruction)
+            else:
+                execute_action = self._infer_plain(action_plan, img_t, state_t, instruction)
 
         with self._lock:
             self._st["sent_prompt"] = str(instruction)
@@ -564,6 +573,75 @@ class SimplerWorker(threading.Thread):
             single[0:1], verifier_action=True, action_ensemble_temp=self.args.action_ensemble_temp))
         return self._convert_action(single[0:1], verifier_action=False,
                                     action_ensemble_temp=self.args.action_ensemble_temp)
+
+    # ----- contract: on-demand phrase scoring (the "Generate & score phrases" button) -----
+
+    def score_phrases(self, text):
+        """At the current (paused) frame, generate rephrases of `text`, sample π0 actions for the
+        prompt + each rephrase, and return every phrase's verifier score. Read-only preview: it does
+        NOT step the env or mutate rollout state (action history / plan), so the user can inspect the
+        verifier's ranking before choosing a prompt. Verifier-only; requires a loaded frame + paused."""
+        if self.args.stub or not self.args.verifier or self._verifier is None:
+            return {"ok": False, "error": "Phrase scoring needs the verifier — start with VERIFIER=1."}
+        with self._lock:
+            env, obs, paused = self._env, self._obs, self._paused
+            base = (text or "").strip() or self._instruction
+        if env is None or obs is None:
+            return {"ok": False, "error": "Load a scene and press Play once first (need a frame to score)."}
+        if not paused:
+            return {"ok": False, "error": "Pause before scoring phrases."}
+        if not base:
+            return {"ok": False, "error": "Type a prompt to score."}
+        try:
+            with self._gpu_lock:
+                phrases, selected, generated = self._score_now(env, obs, base)
+            return {"ok": True, "base": base, "phrases": phrases,
+                    "selected": selected, "generated": generated}
+        except Exception as e:  # noqa: BLE001
+            logger.exception("score_phrases failed")
+            return {"ok": False, "error": "Scoring failed: %s" % e}
+
+    def _score_now(self, env, obs, base):
+        """Sample + verifier-score [base] + rephrases at the given frame. Returns
+        (sorted [[phrase, score], ...], selected_phrase, num_generated). No side effects."""
+        rephrases = self._rephrases_for(base)
+        unique_prompts = [base] + list(rephrases)
+        B = int(self.args.policy_batch_inference_size)
+        batch_size = B * len(unique_prompts)
+        task_list = [p for p in unique_prompts for _ in range(B)]
+
+        raw_img = self._get_image(env, obs)
+        processed = self._adapter.preprocess({
+            "observation.images.top": raw_img, "observation.state": obs, "task": base})
+        dev = self._torch.device(self._policy.config.device)
+        img_t, state_t = processed["observation.images.top"], processed["observation.state"]
+        img_t = img_t.to(dev) if hasattr(img_t, "to") else img_t
+        state_t = state_t.to(dev) if hasattr(state_t, "to") else state_t
+
+        observation = {
+            self._image_key: img_t.repeat(batch_size, 1, 1, 1),
+            "observation.state": state_t.repeat(batch_size, 1),
+            "task": task_list,
+        }
+        with self._torch.no_grad():
+            q = self._policy.select_action(observation, noise_std=1.0)
+            predefined = list(q)
+            q.clear()
+        hist = self._process_inputs(batch_size, predefined, verifier_action=True,
+                                    action_history=list(self._action_history), cfg=self.args)
+        img_jpg = self._process_raw_image_to_jpg(raw_img)
+
+        phrase_scores = []
+        for i, prompt in enumerate(unique_prompts):
+            s0 = i * B
+            with self._torch.no_grad():
+                score, _s, _a, _idx = self._verifier.compute_max_similarity_scores_batch(
+                    images=[img_jpg] * B, instructions=[prompt] * B,
+                    all_action_histories=hist[s0:s0 + B], cfg_repeat_language_instructions=B)
+            phrase_scores.append([prompt, float(score)])
+        phrase_scores.sort(key=lambda x: -x[1])
+        selected = phrase_scores[0][0] if phrase_scores else base
+        return phrase_scores, selected, len(rephrases)
 
     # ----- stub (no GPU / no sim: validates the web contract only) -----
 

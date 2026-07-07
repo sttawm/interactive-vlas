@@ -32,6 +32,10 @@ A backend "worker" must provide:
     request_reset(selection, instruction="") -> None   # selection = {selector_name: value}
     set_paused(paused: bool) -> None
     save_video(name, speed) -> path|None    # compose/return an mp4 of the run-so-far
+    score_phrases(text) -> dict             # optional; when config() also returns
+        # "score_phrases": true, this powers the "Generate & score phrases" button (shown next to
+        # the prompt, paused-only). Returns {"ok": True, "phrases": [[phrase, score], ...],
+        # "selected": str, "generated": int} or {"ok": False, "error": str}.
 
 `compose_video(frames, prompts, ...)` below is a reusable helper a worker can call from
 save_video() to render the captioned, speed-adjustable video; backends that already keep
@@ -162,6 +166,14 @@ def build_app(worker):
         path = pathlib.Path(path).resolve()
         return send_file(str(path), mimetype="video/mp4", as_attachment=True, download_name=path.name)
 
+    @app.route("/score_phrases", methods=["POST"])
+    def score_phrases():
+        # Optional: a worker that advertises "score_phrases": true in /config implements this to
+        # generate + verifier-score rephrases of the current prompt at the paused frame.
+        if not hasattr(worker, "score_phrases"):
+            return jsonify(ok=False, error="This backend doesn't support phrase scoring."), 400
+        return jsonify(worker.score_phrases((request.json or {}).get("text", "")))
+
     return app
 
 
@@ -200,6 +212,7 @@ INDEX_HTML = r"""
   <div class="hint">Editable while paused; press Play to send it &amp; run.</div>
   <div class="hint" id="canon"></div>
   <div id="examples"></div>
+  <div id="scorewrap" style="display:none"><button id="scorebtn" class="alt" style="margin-top:10px;width:100%">🎯 Generate &amp; score phrases</button><div id="scorebox"></div></div>
   <div class="row" style="gap:8px;margin-top:16px"><button id="play" class="big" style="flex:2">▶ Play</button><button id="reset" class="alt big" style="flex:1">↻ Reset</button></div>
   <div class="row" style="gap:8px;margin-top:14px;align-items:center"><button id="savevid" class="alt" style="flex:2">💾 Save video</button><label style="margin:0;color:#aaa">speed</label><select id="speed" style="flex:0 0 auto"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select></div>
   <div class="hint">Send a new instruction any time — corrections or staged subgoals. Save video captions the active prompt under each frame.</div>
@@ -260,8 +273,23 @@ $('savevid').onclick=async()=>{ const def='run_'+new Date().toISOString().slice(
   if(!r.ok){ let j={}; try{j=await r.json();}catch(e){} toast(j.error||'Save failed','#e06c75'); return; }
   const blob=await r.blob(),url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(name||'run')+'.mp4'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); toast('Saved ✓ — downloaded + kept on the pod');
  }catch(e){ toast('Save failed: '+e,'#e06c75'); } finally{ btn.disabled=false; btn.textContent=orig; } };
+
+// Generate & score phrases (verifier-only; button shown when /config sets score_phrases). Previews
+// the verifier's ranking of the current prompt + its rephrases at the paused frame, without stepping.
+if($('scorebtn')) $('scorebtn').onclick=async()=>{
+ if(!serverPaused){toast('Pause to score phrases','#e0a23b');return;}
+ const t=$('instr').value.trim(); if(!t){toast('Type a prompt first','#e0a23b');return;}
+ const btn=$('scorebtn'),orig=btn.textContent; btn.disabled=true; btn.textContent='Scoring…'; toast('Generating & scoring phrases…','#d8a657');
+ try{ const r=await fetch('/score_phrases',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); const j=await r.json();
+  if(!j.ok){ toast(j.error||'Scoring failed','#e06c75'); $('scorebox').innerHTML=''; return; }
+  renderScores(j); toast('Scored '+((j.phrases||[]).length)+' phrases');
+ }catch(e){ toast('Scoring failed: '+e,'#e06c75'); } finally{ btn.disabled=false; btn.textContent=orig; } };
+function renderScores(j){ const box=$('scorebox'); const ph=j.phrases||[]; if(!ph.length){box.innerHTML='';return;}
+ const rows=ph.map(x=>{ const p=x[0],sc=x[1],sel=(p===j.selected); return `<div class="srow" data-p="${encodeURIComponent(p)}" style="cursor:pointer"><span class="k">${sel?'➤ ':''}${esc(p)}</span><span class="v">${(+sc).toFixed(3)}</span></div>`; }).join('');
+ box.innerHTML='<div class="hint" style="margin:10px 0 4px">Verifier scores — '+ph.length+' phrase'+(ph.length==1?'':'s')+(j.generated?(' ('+j.generated+' generated)'):'')+', click to use:</div><div class="status">'+rows+'</div>';
+ box.querySelectorAll('.srow').forEach(el=>el.onclick=()=>{ if(!serverPaused){toast('Pause to change the prompt','#e0a23b');return;} $('instr').value=decodeURIComponent(el.getAttribute('data-p')); toast('Prompt set — press Play'); }); }
 let serverPaused=true, limitReached=false;
-function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); $('instr').disabled=!p; }  // prompt editable only while paused
+function syncPlay(p){ serverPaused=p; const b=$('play'); b.textContent=p?'▶ Play':'⏸ Pause'; b.classList.toggle('ready',p); $('instr').disabled=!p; const sb=$('scorebtn'); if(sb) sb.disabled=!p; }  // prompt + phrase-scoring editable only while paused
 $('play').onclick=async()=>{ if(limitReached){toast('Step limit reached — press Reset.','#e0a23b');return;}
  const np=!serverPaused;
  if(!np){ const t=$('instr').value.trim(); if(t) await fetch('/instruction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}); }  // pressing Play also sends the typed prompt
@@ -280,6 +308,7 @@ async function poll(){
 (async()=>{ const c=await (await fetch('/config')).json(); SELS=c.selectors||[];
  document.title=c.title||'Interactive VLA'; $('title').textContent=c.title||'Interactive VLA';
  if(c.instruction_label)$('instrlabel').textContent=c.instruction_label; if(c.instruction_placeholder)$('instr').placeholder=c.instruction_placeholder;
+ if(c.score_phrases)$('scorewrap').style.display='';
  buildSelectors(); doLoad(); poll(); })();
 </script></body></html>
 """

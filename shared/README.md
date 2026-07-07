@@ -30,6 +30,11 @@ set_instruction(text) -> None
 request_reset(selection, instruction="") -> None   # selection = {selector_name: value}
 set_paused(paused: bool) -> None
 save_video(name, speed) -> path | None             # optional; enables the Save-video button
+score_phrases(text) -> dict                        # optional; enables the "Generate & score
+                                                   #   phrases" button when config() also returns
+                                                   #   "score_phrases": true. Returns
+                                                   #   {ok, phrases:[[phrase,score],...], selected,
+                                                   #    generated} or {ok:false, error}.
 ```
 
 - **Selectors** are generic and cascade: a selector with `depends_on` reads its options

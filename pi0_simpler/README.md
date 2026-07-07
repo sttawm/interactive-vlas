@@ -28,9 +28,19 @@ This instance serves the **same web page** as the others via [`shared/webui.py`]
 
 ## Setup (one command on a fresh GPU pod)
 
-**You need:** an NVIDIA GPU pod with **working Vulkan** (SimplerEnv/SAPIEN renders with Vulkan,
-not just EGL/OSMesa — see Troubleshooting), Ubuntu 22.04, **Python 3.10**, CUDA 12.x, ~60 GB disk.
-**Expose port 8888 (HTTP) and port 22 (SSH)** when creating the pod.
+### RunPod / GPU pod specs
+
+| Requirement | Value |
+|-------------|-------|
+| **GPU** | Any NVIDIA GPU **with working Vulkan** — SimplerEnv/SAPIEN renders through Vulkan, not just EGL/OSMesa (this is the one hard requirement; see Troubleshooting). RunPod's standard CUDA 12.x images ship the NVIDIA Vulkan ICD. |
+| **VRAM** | **≥16 GB** for the plain π0 viewer (RTX 4090 / A5000 / L4 / A10, all 24 GB, are comfortable). **≥24 GB** with `VERIFIER=1` — the CoVer verifier adds a ~1B model plus batched sampling of `policy_batch_inference_size × lang_rephrase_num` action candidates; **40 GB** (A6000 / A100) is roomy. |
+| **Driver / CUDA** | CUDA **12.x** driver (the CoVer venv pins `torch==2.11+cu128`). |
+| **OS / Python** | Ubuntu 22.04, **Python 3.10**. |
+| **Disk** | **~60 GB** (deps ~15 GB · π0-Bridge checkpoint ~7 GB · verifier 312 MB · SimplerEnv assets). Put it on the persistent `/workspace` volume. |
+| **Ports** | Expose **8888 (HTTP)** and **22 (SSH)** when creating the pod. |
+| **Locality** | Prefer a pod **near you** — a distant pod is laggy for both the ~15–25 min startup and the live frame rate. |
+
+A RunPod Community-Cloud RTX 4090 or A5000 (~$0.30–0.45/hr) runs the plain viewer well; pick a 40 GB card (A6000/A100) if you'll run the verifier heavily. **Cheapest sanity check before committing GPU $$:** the `setup.sh` Vulkan smoke test (§How it works) tells you in one line whether a given pod can render SAPIEN at all.
 
 ```bash
 git clone https://github.com/sttawm/interactive-vlas.git
@@ -66,6 +76,10 @@ downloads/venv build) then `run.sh`, in a detached tmux `boot` session.
 2. **Press Play.** The WidowX arm acts toward the instruction. You watch the live overhead camera.
 3. **Steer it** — edit the instruction any time (paraphrase, correction, or a different in-scene
    goal). It triggers an **immediate replan**.
+4. **Preview the verifier** (verifier mode only) — while paused, click **🎯 Generate & score
+   phrases** next to the prompt. It generates rephrases of your current prompt (shipped JSON or live
+   Claude), scores each with the CoVer verifier at the current frame, and shows a ranked list — click
+   any phrase to load it as the prompt. This is a read-only preview; it doesn't step the robot.
 
 > ⚠️ Language only works if the objects/goal exist in the chosen scene — SimplerEnv WidowX tasks
 > are fixed tabletop setups (eggplant/basket, spoon/towel, blocks, carrot/plate, …).
