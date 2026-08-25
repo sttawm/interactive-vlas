@@ -69,6 +69,12 @@ SHARDS = {  # interleaved so no pod carries all the slow libero_90 failures
     "lb4x": [("libero_90", 60), ("libero_90", 82)],
 }
 
+# Cross-scene pairs (user 2026-08-25): roll the NOVEL task's full phrase board
+# in the TRAINED scene that shares its canonical string. ttid None = look the
+# trained task up by exact language match in the trained suite at runtime.
+CROSS_PAIRS = {"lb2": [("libero_goal", 7, "libero_90", 44),
+                       ("libero_10", None, "libero_90", 77)]}
+
 # E1 deepen extension: extra virgin init windows on already-run tasks
 DEEPEN_ORIG_INITS = list(range(10, 30))     # orig n 10 -> 30
 DEEPEN_TIER_INITS = list(range(5, 10))      # each nat/adv phrase n 5 -> 10
@@ -168,7 +174,7 @@ def main():
     p.add_argument("--resize", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--skip-oracle", action="store_true")
-    p.add_argument("--phase", choices=["main", "deepen", "oracleplus"], default="main",
+    p.add_argument("--phase", choices=["main", "deepen", "oracleplus", "cross"], default="main",
                    help="deepen = E1: extend orig/tier/confirm cells on virgin inits, no board search")
     args = p.parse_args()
 
@@ -229,6 +235,45 @@ def main():
                                    "ts": datetime.datetime.now().isoformat(timespec="seconds")}) + "\n")
             logf.flush()
         return succ
+
+    if args.phase == "cross":
+        for tsuite, ttid, nsuite, ntid in CROSS_PAIRS.get(args.shard, []):
+            if nsuite not in suites:
+                suites[nsuite] = benchmark.get_benchmark_dict()[nsuite]()
+            canon = str(suites[nsuite].get_task(ntid).language)
+            if tsuite not in suites:
+                suites[tsuite] = benchmark.get_benchmark_dict()[tsuite]()
+            ts = suites[tsuite]
+            if ttid is None:
+                ttid = next((i for i in range(ts.n_tasks)
+                             if str(ts.get_task(i).language) == canon), None)
+                if ttid is None:
+                    print("CROSS: no task in %s matches %r -- skipped" % (tsuite, canon), flush=True)
+                    continue
+            members = boards_state.get("%s/%d" % (nsuite, ntid), {}).get("members", [])
+            tiers = phrases[canon]
+            board = []
+            seen = set()
+            for ph in [canon] + tiers["natural"] + tiers["adversarial"] + members:
+                if ph.lower() not in seen:
+                    seen.add(ph.lower())
+                    board.append(ph)
+            task = ts.get_task(ttid)
+            bddl = pathlib.Path(get_libero_path("bddl_files")) / task.problem_folder / task.bddl_file
+            env = OffScreenRenderEnv(bddl_file_name=str(bddl), camera_heights=ENV_RES,
+                                     camera_widths=ENV_RES)
+            env.seed(args.seed)
+            init_states = ts.get_task_init_states(ttid)
+            print("== CROSS %s task %d (trained scene of %r): %d phrases from %s/%d board"
+                  % (tsuite, ttid, canon, len(board), nsuite, ntid), flush=True)
+            for ph in board:
+                c = run_cell(env, init_states, tsuite, ttid, canon, "cross", ph,
+                             list(range(5)), max(MAX_STEPS.get(tsuite, 300), 300))
+                print("  cross %d/5  %r" % (c, ph[:60]), flush=True)
+            env.close()
+        logf.close()
+        print("SHARD-COMPLETE %s" % args.shard, flush=True)
+        return
 
     for suite_name, tid in SHARDS[args.shard]:
         if suite_name not in suites:
