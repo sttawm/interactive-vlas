@@ -174,6 +174,8 @@ def main():
     p.add_argument("--resize", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--skip-oracle", action="store_true")
+    p.add_argument("--tasks", default="",
+                   help="comma list suite:tid overriding the shard's task list, e.g. libero_90:31,libero_90:35")
     p.add_argument("--phase", choices=["main", "deepen", "oracleplus", "cross"], default="main",
                    help="deepen = E1: extend orig/tier/confirm cells on virgin inits, no board search")
     args = p.parse_args()
@@ -275,7 +277,11 @@ def main():
         print("SHARD-COMPLETE %s" % args.shard, flush=True)
         return
 
-    for suite_name, tid in SHARDS[args.shard]:
+    task_list = SHARDS[args.shard]
+    if args.tasks.strip():
+        task_list = [(p.split(":")[0], int(p.split(":")[1])) for p in args.tasks.split(",") if p.strip()]
+
+    for suite_name, tid in task_list:
         if suite_name not in suites:
             suites[suite_name] = benchmark.get_benchmark_dict()[suite_name]()
         suite = suites[suite_name]
