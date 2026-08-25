@@ -302,5 +302,117 @@
       "Execute a spatial translation of the brown dairy treat, depositing it on a rightward vector relative to the plate.",
       "It is strictly required that the chocolate pudding be situated by you such that the plate remains entirely to the left of the dessert."
     ]
+  },
+  "put the black bowl in the top drawer of the cabinet": {
+    "natural": [
+      "Place the black bowl inside the highest cabinet drawer.",
+      "Can you stick that black bowl into the upper cabinet drawer for me?",
+      "Open the top drawer of the cabinet and store the dark bowl in it.",
+      "Tuck the black bowl away in the cabinet's top drawer.",
+      "Move the black bowl to the very top drawer of the cabinet."
+    ],
+    "adversarial": [
+      "Taking hold of the black dishware, ensure it is deposited within the uppermost sliding compartment of the cabinet.",
+      "If it is not too much trouble, I would greatly appreciate it if the bowl of black coloration were to find its new home in the highest available drawer of the cabinet.",
+      "Regarding the cabinet currently before you, its superior drawer is the intended receptacle for the black bowl; please execute this transfer.",
+      "The dark, open-topped vessel designed for soup needs to be relocated to the drawer situated at the absolute peak of the cabinet.",
+      "Commence a grasp on the black bowl and subsequently transport it such that it rests entirely enclosed within the cabinet's zenith drawer."
+    ]
+  },
+  "put the right moka pot on the stove": {
+    "natural": [
+      "Move the moka pot on the right over to the stovetop",
+      "Set the rightmost espresso maker onto the burner",
+      "Take the right metal coffee pot and place it on the stove",
+      "Please position the right moka pot on the stove",
+      "Grab the moka pot on the right hand side and sit it on the stove"
+    ],
+    "adversarial": [
+      "I would be exceedingly grateful if you could transfer the espresso brewing device located to the right onto the heating element",
+      "The metallic coffee vessel which currently occupies the rightward position must be relocated atop the stove",
+      "Provided the cooking appliance is ready, kindly deposit the right moka pot directly onto its surface",
+      "Convey the octagonal Italian coffee maker positioned on the right side to a resting place upon the stove",
+      "As for the apparatus on the right that you would use to brew stovetop espresso, proceed to situate it on the burner"
+    ]
+  },
+  "pick up the book and place it in the left compartment of the caddy": {
+    "natural": [
+      "Put the book into the left side of the caddy",
+      "Grab that paperback and drop it in the caddy's left bin",
+      "Can you just tuck the book into the left compartment of the caddy",
+      "Into the left slot of the caddy, please place the book",
+      "Move the hardcover over to the left section of the caddy"
+    ],
+    "adversarial": [
+      "The item filled with bound pages, which currently rests before you, should be relocated such that it occupies the leftmost division of the caddy",
+      "If it is not too much trouble, I would be most grateful if you could elevate the book and deposit it securely within the caddy's left-hand partition",
+      "It is required that the reading material be lifted from its present coordinates and introduced into the compartment situated on the left of the caddy",
+      "Rather than leaving it where it is, take the object one would open to read and convey it into the caddy, specifically targeting the compartment that is not on the right",
+      "Execute a grasp operation on the book, subsequently transporting and releasing said item precisely into the left receptacle of the aforementioned caddy"
+    ]
+  },
+  "put the moka pot on the stove": {
+    "natural": [
+      "Move the moka pot onto the stovetop.",
+      "Can you place that silver coffee pot on the burner?",
+      "Put that moka pot right on the stove for me.",
+      "Take the aluminum espresso pot and leave it on the stove.",
+      "Grab the moka pot and bring it over to the stove."
+    ],
+    "adversarial": [
+      "Kindly transport the octagonal metallic apparatus used for brewing espresso directly atop the primary heating appliance.",
+      "The moka pot, which is currently sitting out, needs to be relocated such that its base rests completely on the stove.",
+      "Assuming the cooking area is clear, I would greatly appreciate it if you could ensure the stove becomes the new resting place for the moka pot.",
+      "It is required that the Italian espresso vessel be deposited upon the thermal element without delay.",
+      "To the stove is exactly where the device we use to make our morning coffee ought to be conveyed by you."
+    ]
+  },
+  "pick up the cream cheese and put it in the tray": {
+    "natural": [
+      "Can you place the cream cheese onto the tray?",
+      "Grab the block of white cheese and drop it in the tray.",
+      "Move that cream cheese over to the tray.",
+      "Please put the cream cheese in the tray for me.",
+      "Take the cream cheese and set it down inside the tray."
+    ],
+    "adversarial": [
+      "The dairy spread requires relocation; kindly deposit it into the shallow flat-bottomed receptacle.",
+      "Assuming your grippers are currently empty, grasp the soft bagel-topping cheese and convey it toward the tray until it rests within.",
+      "You are hereby instructed to execute a transfer of the cream cheese, terminating said motion only when it is secured within the confines of the tray.",
+      "If it wouldn't be too much trouble, I would greatly appreciate it if you could lift the cream cheese and carry it over to where the tray is, leaving it inside.",
+      "The cream cheese, which is currently sitting out, must be picked up and subsequently positioned so that the tray now contains it."
+    ]
+  },
+  "pick up the tomato sauce and put it in the tray": {
+    "natural": [
+      "Grab the tomato sauce and set it inside the tray.",
+      "Could you move the red bottle of sauce into the tray for me?",
+      "Place the tomato sauce into the tray.",
+      "Put that tomato sauce right over there in the tray.",
+      "Transfer the tomato sauce to the tray."
+    ],
+    "adversarial": [
+      "Assuming you are ready to proceed, I would be most grateful if you could see to it that the pur\u00e9ed red condiment is relocated into the shallow flat receptacle.",
+      "The tomato sauce, currently resting in your workspace, is to be lifted and subsequently deposited directly within the confines of the tray.",
+      "Execute a grasping maneuver on the tomato-based liquid container and convey it into the awaiting transport tray.",
+      "Provided the path is clear, ensure that the red sauce used for cooking is retrieved from its current position and securely stationed inside the tray.",
+      "Be so kind as to take hold of the tomato sauce and bestow it upon the flat container designated for holding items."
+    ]
+  },
+  "pick up the black bowl on the left and put it in the tray": {
+    "natural": [
+      "Place the leftmost black bowl into the tray.",
+      "Can you move the black bowl on the left over to the tray?",
+      "Grab that dark dish on the left side and set it down in the tray.",
+      "Transfer the black bowl from the left directly into the tray.",
+      "Please take the black bowl located on your left and leave it in the tray."
+    ],
+    "adversarial": [
+      "Regarding the dark-colored container on the left that one might eat soup out of, ensure it is lifted and deposited into the flat carrying tray.",
+      "If it is no trouble, I would greatly appreciate it if you could relocate the ebony bowl situated on the left-hand side to the interior of the tray.",
+      "It is requested that the black bowl occupying the leftmost position be immediately conveyed to, and situated within, the tray.",
+      "Execute a grasp operation on the left-aligned black bowl, subsequently transporting said item to rest inside the perimeter of the tray.",
+      "Without interacting with anything on the right, secure the black bowl on the left and complete a transfer of it into the tray."
+    ]
   }
 }

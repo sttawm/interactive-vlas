@@ -1,0 +1,92 @@
+[
+  {
+    "suite": "libero_90",
+    "task_id": 10,
+    "canonical": "put the black bowl on top of the cabinet",
+    "prior_canonical_rate": "4/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 29,
+    "canonical": "put the black bowl in the top drawer of the cabinet",
+    "prior_canonical_rate": "2/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 38,
+    "canonical": "put the right moka pot on the stove",
+    "prior_canonical_rate": "2/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 79,
+    "canonical": "pick up the book and place it in the left compartment of the caddy",
+    "prior_canonical_rate": "2/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 2,
+    "canonical": "put the black bowl in the top drawer of the cabinet",
+    "prior_canonical_rate": "4/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 19,
+    "canonical": "put the moka pot on the stove",
+    "prior_canonical_rate": "4/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 57,
+    "canonical": "pick up the cream cheese and put it in the tray",
+    "prior_canonical_rate": "4/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 59,
+    "canonical": "pick up the tomato sauce and put it in the tray",
+    "prior_canonical_rate": "3/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 60,
+    "canonical": "pick up the black bowl on the left and put it in the tray",
+    "prior_canonical_rate": "3/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  },
+  {
+    "suite": "libero_90",
+    "task_id": 82,
+    "canonical": "pick up the book and place it in the left compartment of the caddy",
+    "prior_canonical_rate": "3/5",
+    "phase": "ext",
+    "suite_in_finetune": false,
+    "string_in_finetune": false
+  }
+]

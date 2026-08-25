@@ -61,7 +61,18 @@ SHARDS = {  # interleaved so no pod carries all the slow libero_90 failures
             ("libero_90", 14), ("libero_90", 54), ("libero_90", 70)],
     "lb4": [("libero_goal", 8), ("libero_goal", 9),
             ("libero_90", 64), ("libero_90", 12), ("libero_90", 28)],
+    # E2 coverage extension: the remaining 10 mid-band libero_90 tasks
+    # (incl. deliberate same-string/different-scene pairs 2/29 and 79/82)
+    "lb1x": [("libero_90", 10), ("libero_90", 29), ("libero_90", 38)],
+    "lb2x": [("libero_90", 79), ("libero_90", 2)],
+    "lb3x": [("libero_90", 19), ("libero_90", 57), ("libero_90", 59)],
+    "lb4x": [("libero_90", 60), ("libero_90", 82)],
 }
+
+# E1 deepen extension: extra virgin init windows on already-run tasks
+DEEPEN_ORIG_INITS = list(range(10, 30))     # orig n 10 -> 30
+DEEPEN_TIER_INITS = list(range(5, 10))      # each nat/adv phrase n 5 -> 10
+DEEPEN_CONFIRM_INITS = list(range(30, 50))  # finalists n 10 -> 30 (2nd virgin window)
 
 N_NAT = N_ADV = 5
 ORIG_TRIALS, TIER_TRIALS = 10, 5
@@ -157,6 +168,8 @@ def main():
     p.add_argument("--resize", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--skip-oracle", action="store_true")
+    p.add_argument("--phase", choices=["main", "deepen"], default="main",
+                   help="deepen = E1: extend orig/tier/confirm cells on virgin inits, no board search")
     args = p.parse_args()
 
     api_key = os.environ.get("GEMINI_API_KEY", "")
@@ -172,7 +185,8 @@ def main():
     boards_path = args.out + ".boards.json"
     boards_state = json.load(open(boards_path)) if os.path.exists(boards_path) else {}
 
-    done = {}   # (suite, tid, arm, phrase, init) -> success
+    done = {}   # (suite, tid, phrase, init) -> success
+    confirm_phrases = {}   # (suite, tid) -> set of confirm-arm phrases (for --phase deepen)
     if os.path.exists(args.out):
         for line in open(args.out):
             line = line.strip()
@@ -181,6 +195,8 @@ def main():
             try:
                 r = json.loads(line)
                 done[(r["suite"], r["task_id"], r["phrase"], r["init"])] = r["success"]
+                if r["arm"] == "confirm":
+                    confirm_phrases.setdefault((r["suite"], r["task_id"]), set()).add(r["phrase"])
             except (json.JSONDecodeError, KeyError):
                 pass  # truncated tail row from a mid-write kill
         print("[resume] %d episodes already logged" % len(done), flush=True)
@@ -226,6 +242,22 @@ def main():
         assert len(init_states) >= 30, "task %d has only %d init states" % (tid, len(init_states))
         t_task = time.time()
         print("== %s task %d: %r (%d inits)" % (suite_name, tid, canon, len(init_states)), flush=True)
+
+        if args.phase == "deepen":
+            s0 = run_cell(env, init_states, suite_name, tid, canon, "orig", canon,
+                          DEEPEN_ORIG_INITS, max_steps)
+            print("  deepen orig +%d inits -> %d succ" % (len(DEEPEN_ORIG_INITS), s0), flush=True)
+            for kind, tag in (("natural", "nat"), ("adversarial", "adv")):
+                for i, ph in enumerate(tiers[kind]):
+                    run_cell(env, init_states, suite_name, tid, canon, "%s%d" % (tag, i + 1),
+                             ph, DEEPEN_TIER_INITS, max_steps)
+            for ph in sorted(confirm_phrases.get((suite_name, tid), [])):
+                c = run_cell(env, init_states, suite_name, tid, canon, "confirm2", ph,
+                             DEEPEN_CONFIRM_INITS, max_steps)
+                print("  deepen confirm2 %d/%d  %r" % (c, len(DEEPEN_CONFIRM_INITS), ph[:60]), flush=True)
+            env.close()
+            print("  DEEPEN done %s/%d  [%.0fs]" % (suite_name, tid, time.time() - t_task), flush=True)
+            continue
 
         # ---- 1. tiers -------------------------------------------------------
         s = run_cell(env, init_states, suite_name, tid, canon, "orig", canon,

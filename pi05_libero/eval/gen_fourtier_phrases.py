@@ -75,7 +75,9 @@ def parse(out):
 
 
 def main():
-    tasks = json.load(open(HERE / "fourtier_tasks.json"))
+    import sys
+    tasks_file = sys.argv[1] if len(sys.argv) > 1 else "fourtier_tasks.json"
+    tasks = json.load(open(HERE / tasks_file))
     out_path = HERE / "fourtier_phrases.json"
     phrases = json.load(open(out_path)) if out_path.exists() else {}
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
