@@ -6,11 +6,11 @@ Per task, against a live policy server (scripts/serve_policy.py --env LIBERO):
      adversarial phrases (fourtier_phrases.json) at 5 trials (inits 0-4, paired).
   2. ORACLE -- rollout board search, ported from phrase-rl scripts/search_boards.py
      (user spec 2026-07-29): board of 16 incl. the canonical + the 5 naturals
-     (their screen cells reuse tier episodes), Gemini tops up to 16; screen = 3
-     trials on inits 0-2; keep top-4; Gemini writes board-16-minus-keep new
+     (their screen cells reuse tier episodes), Gemini tops up to 16; screen = 5
+     trials on inits 0-4; keep top-4; Gemini writes board-16-minus-keep new
      phrases seeing the ranked board (image-conditioned, gemini-3.5-flash,
      temp 0.9); converge when the best screen score stops improving (round >= 2)
-     or the kept set saturates 3/3; max 4 rounds.
+     or the kept set saturates the screen; max 4 rounds.
   3. CONFIRM -- top-4 + canonical at 10 trials on VIRGIN inits 20-29. The
      confirm winner is the reported oracle number (guards winner's curse).
 
@@ -65,7 +65,7 @@ SHARDS = {  # interleaved so no pod carries all the slow libero_90 failures
 
 N_NAT = N_ADV = 5
 ORIG_TRIALS, TIER_TRIALS = 10, 5
-SCREEN_INITS = [0, 1, 2]
+SCREEN_INITS = [0, 1, 2, 3, 4]   # 5-trial screen (user 2026-08-25); canonical+naturals reuse tier episodes
 CONFIRM_INITS = list(range(20, 30))
 BOARD, KEEP, MAX_ROUNDS = 16, 4, 4
 
