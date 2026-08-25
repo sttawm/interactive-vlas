@@ -39,3 +39,6 @@ reports both success rates side by side. The gap = the language-generalization c
 `paraphrases_<suite>.json` maps `{canonical_instruction: paraphrase}` (keyed by the exact
 `task.language` string, so it's robust to task ordering). Generate it from the actual
 task strings; missing entries fall back to canonical (with a warning).
+
+## Four-tier eval (2026-08-25)
+See phrase-rl/FOURTIER-LIBERO.md for the full analysis; data + summary live in that repo (results/analysis/fourtier_*). Harness: fourtier_eval.py here.
