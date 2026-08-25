@@ -168,7 +168,7 @@ def main():
     p.add_argument("--resize", type=int, default=224)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--skip-oracle", action="store_true")
-    p.add_argument("--phase", choices=["main", "deepen"], default="main",
+    p.add_argument("--phase", choices=["main", "deepen", "oracleplus"], default="main",
                    help="deepen = E1: extend orig/tier/confirm cells on virgin inits, no board search")
     args = p.parse_args()
 
@@ -187,6 +187,7 @@ def main():
 
     done = {}   # (suite, tid, phrase, init) -> success
     confirm_phrases = {}   # (suite, tid) -> set of confirm-arm phrases (for --phase deepen)
+    confirm_scores = {}    # (suite, tid, phrase) -> [successes, trials] on the confirm window
     if os.path.exists(args.out):
         for line in open(args.out):
             line = line.strip()
@@ -197,6 +198,9 @@ def main():
                 done[(r["suite"], r["task_id"], r["phrase"], r["init"])] = r["success"]
                 if r["arm"] == "confirm":
                     confirm_phrases.setdefault((r["suite"], r["task_id"]), set()).add(r["phrase"])
+                    cs = confirm_scores.setdefault((r["suite"], r["task_id"], r["phrase"]), [0, 0])
+                    cs[0] += int(r["success"])
+                    cs[1] += 1
             except (json.JSONDecodeError, KeyError):
                 pass  # truncated tail row from a mid-write kill
         print("[resume] %d episodes already logged" % len(done), flush=True)
@@ -257,6 +261,92 @@ def main():
                 print("  deepen confirm2 %d/%d  %r" % (c, len(DEEPEN_CONFIRM_INITS), ph[:60]), flush=True)
             env.close()
             print("  DEEPEN done %s/%d  [%.0fs]" % (suite_name, tid, time.time() - t_task), flush=True)
+            continue
+
+        if args.phase == "oracleplus":
+            # E3: search harder for better oracles on tasks whose confirmed
+            # winner is < 90%. Wider seed (adversarials join -- screens free via
+            # tier reuse), rounds up to 8 total, patience 2, rotating lenses.
+            best_conf = max([c[0] / c[1] for (su, ti, ph), c in confirm_scores.items()
+                             if su == suite_name and ti == tid and c[1] >= 10] or [0.0])
+            if best_conf >= 0.9:
+                print("  ORACLEPLUS skip %s/%d: confirmed winner already %.0f%%"
+                      % (suite_name, tid, best_conf * 100), flush=True)
+                env.close()
+                continue
+            bkey = "%s/%d" % (suite_name, tid)
+            st = boards_state.setdefault(bkey, {"members": [], "rounds_done": 0, "converged": False})
+
+            def screen_score(ph):
+                return run_cell(env, init_states, suite_name, tid, canon, "screen", ph,
+                                SCREEN_INITS, max_steps)
+
+            env.reset()
+            obs = env.set_init_state(init_states[0])
+            for _ in range(args.settle):
+                obs, _, _, _ = env.step(DUMMY)
+            try:
+                from PIL import Image
+                buf = io.BytesIO()
+                Image.fromarray(np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])).save(buf, "PNG")
+                img_part = {"inline_data": {"mime_type": "image/png",
+                                            "data": base64.b64encode(buf.getvalue()).decode()}}
+            except Exception:
+                img_part = None
+
+            LENSES = [
+                "",
+                " This round: write the SIMPLEST, most direct imperatives possible -- plainest everyday words, no ornament.",
+                " This round: name every object by its visible appearance in the image (color, shape, place on the table), common household words.",
+                " This round: spell the action out explicitly -- which object, from where, to where -- one concrete motion per line, under 15 words.",
+            ]
+            seen = set()
+            board = []
+            for ph in [canon] + tiers["natural"] + tiers["adversarial"] + st["members"]:
+                if ph.lower() not in seen:
+                    seen.add(ph.lower())
+                    board.append(ph)
+            scored = {ph: screen_score(ph) for ph in board}
+            best_hist = [max(scored.values())]
+            rd = max(st["rounds_done"], 1)
+            while rd < 8:
+                ranked = sorted(scored.items(), key=lambda x: -x[1])
+                if all(v == len(SCREEN_INITS) for _, v in ranked[:KEEP]):
+                    print("  ORACLEPLUS r%d: top-%d saturated" % (rd, KEEP), flush=True)
+                    break
+                lens = LENSES[rd % len(LENSES)]
+                btxt = "\n".join('%d. "%s"  %d/%d' % (i + 1, ph, v, len(SCREEN_INITS))
+                                  for i, (ph, v) in enumerate(ranked[:8]))
+                parts = ([img_part] if img_part else []) + [{"text": GEN_PROMPT.format(
+                    nominal=canon, k=len(SCREEN_INITS), board=btxt, n=BOARD - KEEP) + lens}]
+                try:
+                    newp = parse_lines(gemini("gemini-3.5-flash", parts, api_key), seen, BOARD - KEEP)
+                except Exception as e:
+                    print("  ORACLEPLUS gen error: %s" % type(e).__name__, flush=True)
+                    break
+                if not newp:
+                    break
+                st["members"] += newp
+                rd += 1
+                st["rounds_done"] = rd
+                json.dump(boards_state, open(boards_path, "w"), indent=1)
+                for ph in newp:
+                    scored[ph] = screen_score(ph)
+                best_hist.append(max(scored.values()))
+                print("  ORACLEPLUS r%d: best %d/%d  %r" % (
+                    rd, best_hist[-1], len(SCREEN_INITS),
+                    max(scored, key=scored.get)[:60]), flush=True)
+                if len(best_hist) >= 3 and best_hist[-1] - best_hist[-3] < 1:
+                    print("  ORACLEPLUS converged (no gain over 2 rounds)", flush=True)
+                    break
+            json.dump(boards_state, open(boards_path, "w"), indent=1)
+            finalists = [ph for ph, _ in sorted(scored.items(), key=lambda x: -x[1])[:KEEP]]
+            for ph in finalists:
+                c = run_cell(env, init_states, suite_name, tid, canon, "confirm", ph,
+                             CONFIRM_INITS, max_steps)
+                print("  ORACLEPLUS confirm %d/10  %r" % (c, ph[:60]), flush=True)
+            env.close()
+            print("  ORACLEPLUS done %s/%d  [%.0fs]" % (suite_name, tid, time.time() - t_task), flush=True)
             continue
 
         # ---- 1. tiers -------------------------------------------------------

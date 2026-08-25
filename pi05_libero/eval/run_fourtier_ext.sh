@@ -23,6 +23,10 @@ tmux new-session -d -s fourtier \
   "cd '$REPO_DIR/eval' && PYTHONPATH='$LIBERO_PYTHONPATH' MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONUNBUFFERED=1 \
    '$LIBERO_VENV/bin/python' -u fourtier_eval.py --shard $SHARD --phase deepen --out $OUT 2>&1 | tee -a '$LOG' && \
    PYTHONPATH='$LIBERO_PYTHONPATH' MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONUNBUFFERED=1 \
-   '$LIBERO_VENV/bin/python' -u fourtier_eval.py --shard ${SHARD}x --out $OUT 2>&1 | tee -a '$LOG'; \
+   '$LIBERO_VENV/bin/python' -u fourtier_eval.py --shard ${SHARD}x --out $OUT 2>&1 | tee -a '$LOG' && \
+   PYTHONPATH='$LIBERO_PYTHONPATH' MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONUNBUFFERED=1 \
+   '$LIBERO_VENV/bin/python' -u fourtier_eval.py --shard $SHARD --phase oracleplus --out $OUT 2>&1 | tee -a '$LOG' && \
+   PYTHONPATH='$LIBERO_PYTHONPATH' MUJOCO_GL=egl PYOPENGL_PLATFORM=egl PYTHONUNBUFFERED=1 \
+   '$LIBERO_VENV/bin/python' -u fourtier_eval.py --shard ${SHARD}x --phase oracleplus --out $OUT 2>&1 | tee -a '$LOG'; \
    echo \"ext chain exited rc=\$?\"; sleep infinity"
-echo "EXT LAUNCHED shard=$SHARD (deepen -> ${SHARD}x coverage)"
+echo "EXT LAUNCHED shard=$SHARD (deepen -> ${SHARD}x coverage -> oracleplus both)"
