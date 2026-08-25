@@ -321,7 +321,7 @@ def main():
             ranked = sorted(scored.items(), key=lambda x: -x[1])
             top = ranked[:KEEP]
             best_hist.append(top[0][1])
-            print("  board r%d: best %d/3  %r" % (rd, top[0][1], top[0][0][:60]), flush=True)
+            print("  board r%d: best %d/%d  %r" % (rd, top[0][1], len(SCREEN_INITS), top[0][0][:60]), flush=True)
             if (len(best_hist) >= 2 and best_hist[-1] - best_hist[-2] < 1) \
                or all(v == len(SCREEN_INITS) for _, v in top) or rd >= MAX_ROUNDS:
                 st["converged"] = True
