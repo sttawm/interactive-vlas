@@ -1,0 +1,306 @@
+{
+  "open the middle drawer of the cabinet": {
+    "natural": [
+      "Pull open the center drawer of that cabinet.",
+      "I need you to slide out the middle cabinet drawer.",
+      "Open up the drawer in the middle of the cabinet.",
+      "Can you pop open that central drawer for me?",
+      "Get the middle drawer on the cabinet open."
+    ],
+    "adversarial": [
+      "Would you be so kind as to extend the centrally located sliding compartment of the cabinetry?",
+      "Regarding the storage cabinet before you, the specific drawer flanked by both an upper and a lower section is the one you must now unseal.",
+      "Assuming you are facing the cabinet, cause the median drawer to transition from a closed state to a fully revealed one.",
+      "Draw forth the intermediate receptacle from within the housing of the cabinet.",
+      "The cabinet drawer that is neither the uppermost nor the lowermost is currently shut, a state of affairs which requires you to pull it outward."
+    ]
+  },
+  "put the bowl on the stove": {
+    "natural": [
+      "Can you place the bowl onto the stove?",
+      "Move the soup bowl over to the stovetop.",
+      "Grab that bowl and set it down on the stove.",
+      "Please take the bowl and leave it on the stove.",
+      "Set the ceramic bowl on top of the stove."
+    ],
+    "adversarial": [
+      "Assuming the cooking area is ready, proceed to convey the deep dish used for liquids onto the surface of the stove.",
+      "It is requested that the concave receptacle be formally deposited upon the primary cooking appliance.",
+      "Take the thing you would typically pour cereal into and relocate it so it rests on the stove.",
+      "Regarding the bowl, your immediate objective is to shift its physical position until it resides on the stovetop.",
+      "The stove needs to have the bowl placed onto it, which is an action you must carry out right now."
+    ]
+  },
+  "put the wine bottle on top of the cabinet": {
+    "natural": [
+      "Place that bottle of wine up on the cabinet.",
+      "Could you move the glass wine bottle to the top of the cabinet?",
+      "Grab the wine bottle and set it down on the cabinet's upper surface.",
+      "Please lift the wine bottle and leave it on the very top of the cabinet.",
+      "Transfer the bottle of wine onto the top of the cabinet."
+    ],
+    "adversarial": [
+      "The glass vessel containing the alcoholic grape beverage must be relocated to the uppermost exterior surface of the cabinet.",
+      "Assuming you have secured a grip on the item we usually pour into goblets, elevate it until it rests upon the cabinet's highest point.",
+      "I would be immensely grateful if you could see your way to depositing the wine bottle atop the cabinet.",
+      "Let the bottle of wine be hoisted such that its final resting place is the superior horizontal face of the cabinet.",
+      "Proceed to grasp the wine bottle and ensure it is transported to, and subsequently positioned directly on, the topmost plane of the cabinet."
+    ]
+  },
+  "open the top drawer and put the bowl inside": {
+    "natural": [
+      "Grab the bowl and stick it in the top drawer.",
+      "Pull open the highest drawer and place the soup bowl in it.",
+      "Can you open up the top drawer and drop that bowl inside?",
+      "Open the uppermost drawer to store the ceramic bowl away.",
+      "Please open the first drawer from the top and put the bowl in there."
+    ],
+    "adversarial": [
+      "Provided the topmost sliding compartment is currently shut, draw it outward to create space for the hemispherical dish to be nested inside.",
+      "Would you be so kind as to unseal the highest available drawer, subsequently depositing the eating vessel within its confines?",
+      "It is required that the uppermost drawer be drawn open, into which the bowl must then be carefully inserted.",
+      "The receptacle meant for soup requires storage; facilitate this by extending the superior drawer and placing the item into the newly revealed void.",
+      "Before you relinquish your grasp on the bowl, ensure that the highest compartment has been pulled open so you can leave the object inside."
+    ]
+  },
+  "put the bowl on top of the cabinet": {
+    "natural": [
+      "Can you grab the bowl and set it up on the cabinet?",
+      "Move that bowl to the top of the cabinet.",
+      "Up on top of the cabinet is where the bowl needs to go.",
+      "Take the ceramic bowl and place it onto the cabinet.",
+      "Stick the bowl up there on top of the cabinet for me."
+    ],
+    "adversarial": [
+      "Assuming you are ready to proceed, I require you to elevate the concave dining vessel so that it rests upon the highest surface of the cabinet.",
+      "If it wouldn't be too much trouble, could you kindly ensure that the bowl finds its way to the uppermost exterior of the cabinetry?",
+      "Given the current state of the workspace, it is imperative that the open-top container designed for liquids be relocated to the superior plane of the cabinet.",
+      "The physical placement of the bowl is to be immediately adjusted such that its final resting location is directly atop the cabinet structure.",
+      "Taking hold of the round dish one would typically use for serving soup, please deposit it securely on the very top of the cabinet."
+    ]
+  },
+  "push the plate to the front of the stove": {
+    "natural": [
+      "Slide that dish over to the front of the stove.",
+      "Move the ceramic plate directly in front of the stove.",
+      "Can you shove the plate forward so it rests in front of the stove?",
+      "Right in front of the stove is where the plate needs to be pushed.",
+      "Just push the flat dish until it reaches the front edge of the stovetop."
+    ],
+    "adversarial": [
+      "I would be immensely grateful if you could see to it that the flat dining vessel is propelled toward the anterior region of the cooking appliance.",
+      "Provided that the physical path remains unobstructed, applying continuous lateral force to the dish until it rests immediately preceding the stove is required.",
+      "Translocate the item from which one traditionally consumes a meal such that its physical coordinates are situated at the stove's frontal perimeter.",
+      "To the frontward facing exterior of the range, the plate is the specific object that you must now forcefully guide.",
+      "The space adjacent to the front of the stove currently lacks the plate, a state of affairs you are instructed to rectify by sliding it there."
+    ]
+  },
+  "put the cream cheese in the bowl": {
+    "natural": [
+      "Place the cream cheese into the bowl.",
+      "Grab the soft white cheese and drop it in the bowl.",
+      "Into the bowl goes the cream cheese.",
+      "Please transfer the cream cheese over to the bowl.",
+      "Set the cream cheese down inside the bowl."
+    ],
+    "adversarial": [
+      "The cream cheese, which is currently sitting outside its proper receptacle, needs to be deposited into the bowl.",
+      "Take the soft dairy spread typically used for bagels and ensure it ends up enclosed by the curved walls of the bowl.",
+      "I require you to relocate the aforementioned cream cheese such that it rests entirely within the confines of the bowl.",
+      "If it would not be an inconvenience, would you kindly see to it that the cream cheese finds its way into the bowl.",
+      "Provided the bowl is ready to receive ingredients, proceed to transport the cream cheese directly into it."
+    ]
+  },
+  "turn on the stove": {
+    "natural": [
+      "Please switch the stove on.",
+      "Could you start the burners?",
+      "Power up the cooking range.",
+      "I need you to ignite the stovetop.",
+      "Go ahead and get the stove going."
+    ],
+    "adversarial": [
+      "The large appliance used for boiling and frying needs its power activated immediately.",
+      "I would be most grateful if you could commence the ignition sequence for the primary cooking apparatus.",
+      "Provided that you are ready to begin food preparation, proceed to bring the heating elements to an active state.",
+      "Cause the machinery upon which we place our cookware to transition from a dormant to a functioning mode.",
+      "It is required that the thermal output device located in the kitchen be switched into its operational configuration."
+    ]
+  },
+  "put the bowl on the plate": {
+    "natural": [
+      "Can you move the bowl over to the plate?",
+      "Place that soup bowl onto the plate.",
+      "Grab the bowl and set it down on top of the plate.",
+      "I need you to transfer this bowl to the plate.",
+      "Set the ceramic bowl on the plate, please."
+    ],
+    "adversarial": [
+      "If it is not too much trouble, I would greatly appreciate it if you could ensure the bowl finds its way onto the plate.",
+      "The object typically used for serving liquid courses must be elevated and subsequently deposited squarely atop the plate.",
+      "Regarding the plate, your immediate objective is to acquire the bowl and situate it directly upon its surface.",
+      "Execute a spatial relocation of the bowl such that its base comes into stable physical contact with the upper face of the plate.",
+      "Prior to any further operations, take hold of the bowl and do not relinquish your grasp until it is fully supported by the plate."
+    ]
+  },
+  "put the wine bottle on the rack": {
+    "natural": [
+      "Place the wine bottle onto the storage rack.",
+      "Can you move the glass wine bottle over to the rack?",
+      "Store the bottle of wine in the rack.",
+      "Just set the wine down on the rack.",
+      "Grab the wine bottle and leave it on the rack."
+    ],
+    "adversarial": [
+      "If it is not too much trouble, please relocate the vessel of fermented grape beverage onto the slatted storage frame.",
+      "Provided your manipulators are available, the rack should be made the new physical location of the wine bottle.",
+      "The bottle of wine, which is currently situated within your workspace, needs to be transferred such that it rests securely upon the rack.",
+      "Take the tall glass container utilized for pouring merlot and deposit it onto the designated storage structure.",
+      "Be so kind as to convey the receptacle of wine to the framework meant for its repose."
+    ]
+  },
+  "put the black bowl on top of the cabinet": {
+    "natural": [
+      "Place the black bowl up onto the cabinet.",
+      "Can you set that black bowl on top of the cabinet?",
+      "The black bowl needs to go up on the cabinet.",
+      "Grab the black dish and put it on top of the cabinet.",
+      "Move this black bowl to the very top of the cabinet."
+    ],
+    "adversarial": [
+      "I would be exceedingly grateful if you could see fit to transfer the black vessel onto the upper exterior surface of the cabinet.",
+      "Provided the path is clear, elevate the bowl that absorbs all visible light until it comes to rest securely atop the cabinet.",
+      "The dark concave receptacle from which one might eat cereal is to be relocated to a position directly surmounting the cabinet.",
+      "That black bowl, which currently resides in your immediate workspace awaiting manipulation, must be hoisted up and deposited on the summit of the cabinet.",
+      "You are hereby instructed to convey the black bowl to a final resting position situated upon the highest horizontal plane of the cabinet."
+    ]
+  },
+  "open the microwave": {
+    "natural": [
+      "Open up the microwave oven.",
+      "Can you pull open the door on the stainless steel microwave?",
+      "Please swing the microwave door wide open.",
+      "Go ahead and unlatch the microwave for me.",
+      "Pop the microwave open."
+    ],
+    "adversarial": [
+      "If it is at all within your current operational capabilities, kindly relieve the microwave of its closed status.",
+      "I would be immensely grateful if you could see your way to granting physical access to the interior chamber of the microwave.",
+      "By applying outward force to the handle, transition the appliance we use to zap leftovers into an ajar configuration.",
+      "Without bumping into any surrounding countertops, ensure that the front door of the microwave is pulled completely open.",
+      "Disengage the latching mechanism on the microwave door so that the inner cavity becomes fully exposed."
+    ]
+  },
+  "pick up the book and place it in the back compartment of the caddy": {
+    "natural": [
+      "Grab the book and drop it into the rear compartment of the caddy.",
+      "Move that paperback to the caddy's back slot.",
+      "Can you put the book in the back part of the caddy for me?",
+      "Take the reading material and stow it in the back section of the caddy.",
+      "Transfer the book into the furthest compartment of the caddy."
+    ],
+    "adversarial": [
+      "The object primarily utilized for reading purposes must be hoisted and subsequently deposited into the posterior subdivision of the caddy.",
+      "I would greatly appreciate it if you could secure the bound volume and ensure it is stowed within the caddy's hindmost receptacle.",
+      "Assuming you are ready to proceed, kindly grasp the literary artifact and facilitate its transfer to the compartment situated at the very back of the caddy.",
+      "Regarding the item composed of printed pages, please elevate it and execute a placement maneuver targeting the rearmost section of the storage caddy.",
+      "It is required that the book, which currently rests before you, be relocated to the compartment of the caddy located furthest from the front."
+    ]
+  },
+  "put the middle black bowl on the plate": {
+    "natural": [
+      "Place that black bowl in the middle onto the plate.",
+      "Can you move the center black bowl over to the plate?",
+      "Set the black bowl from the middle directly onto the plate.",
+      "Grab the middle black bowl and put it on the plate.",
+      "Onto the plate, please transfer the black bowl located in the center."
+    ],
+    "adversarial": [
+      "Of the black bowls, take the central one and deposit it atop the flat dining dish.",
+      "The plate is where the black bowl currently occupying the median position needs to be situated.",
+      "I would be most grateful if you were to transport the black concave container positioned midway directly onto the plate.",
+      "Provided the workspace is clear, ensure the black bowl located equidistantly from the others is transferred to the plate.",
+      "Execute a grasp on the middle black basin and release it only when its base makes contact with the plate."
+    ]
+  },
+  "pick up the tomato sauce and put it in the basket": {
+    "natural": [
+      "Grab the tomato sauce and place it into the basket.",
+      "Could you move the red sauce over to the basket?",
+      "Toss the tomato sauce in the basket for me.",
+      "Please take the bottle of tomato sauce and set it inside the basket.",
+      "The basket needs the tomato sauce, so go ahead and drop it in there."
+    ],
+    "adversarial": [
+      "Proceed to elevate the red pasta condiment and deposit it within the woven receptacle.",
+      "Assuming your manipulators are active, acquire the tomato-based liquid and, making sure not to drop it prematurely, relocate it to the interior of the basket.",
+      "I would be exceedingly grateful if you could see your way to lifting the tomato sauce and conveying it directly into the basket.",
+      "Let the tomato sauce be grasped from its current resting place and subsequently transferred into the basket.",
+      "Take hold of the pureed red fruit and release it inside the container traditionally used for carrying goods."
+    ]
+  },
+  "stack the right bowl on the left bowl and place them in the tray": {
+    "natural": [
+      "Put the bowl on the right on top of the one on the left, and move the stack to the tray.",
+      "Grab the rightmost bowl, place it onto the left one, and set the pair down in the tray.",
+      "The tray needs both bowls inside it, but make sure the right bowl is stacked on top of the left one first.",
+      "Could you put the right dish onto the left dish and then transfer them both into the tray?",
+      "Set the right bowl down on the left bowl and slide the combined stack into the tray."
+    ],
+    "adversarial": [
+      "If it would not be too much trouble, prior to depositing the vessels into the flat receptacle, kindly ensure the bowl situated to your right is resting atop its leftmost counterpart.",
+      "Proceed to elevate the rightmost hemispherical dish, superimpose it upon the dish to its left, and subsequently translate the resultant bipartite structure into the tray.",
+      "Into the tray you must eventually place the items, but only after you have taken the bowl currently occupying the right side and placed it securely onto the bowl occupying the left.",
+      "The object you would typically eat soup out of on the right needs to be set atop the identical object on the left, at which point the entire assembly should be transported to the serving platter.",
+      "Execute a maneuver wherein the right-hand bowl is conjoined to the top of the left-hand bowl, culminating in the relocation of the newly formed stack to the tray."
+    ]
+  },
+  "put the black bowl at the back on the plate": {
+    "natural": [
+      "Move the black bowl in the back onto the plate.",
+      "Can you place the rear dark bowl on the plate?",
+      "Grab the black bowl from the back and set it on top of the plate.",
+      "Transfer the furthest black bowl to the plate.",
+      "Set the black bowl that is in the back on the plate."
+    ],
+    "adversarial": [
+      "If it wouldn't be an imposition, kindly relocate the darkest concave vessel stationed in the rear so that it rests entirely upon the flat dish.",
+      "Taking the black bowl that is situated furthest away from you, I need you to deposit it directly atop the plate.",
+      "The plate requires an item; therefore, ensure the rearward black basin is conveyed onto it.",
+      "Relocate the ebony bowl from the background to a stationary position on the dining plate.",
+      "Before doing anything else, see to it that the black-colored bowl occupying the back is securely deposited on the plate."
+    ]
+  },
+  "close the top drawer of the cabinet": {
+    "natural": [
+      "Push the highest drawer shut.",
+      "Please shut the upper cabinet drawer.",
+      "Make sure the topmost drawer is completely closed.",
+      "Slide the top drawer all the way in.",
+      "Can you close up that top drawer for me?"
+    ],
+    "adversarial": [
+      "If it would not be too much trouble, I would greatly appreciate it if you could ensure that the uppermost sliding compartment of the furniture piece is firmly shut.",
+      "The storage unit's highest receptacle currently stands open; kindly return it to its flush, sealed position.",
+      "Provided you have clearance, execute a pushing maneuver on the pinnacle drawer until it fully recedes into the main housing.",
+      "It is required that the drawer situated at the very peak of the cabinet be brought into a closed state.",
+      "Regarding the tiered storage cabinet, apply inward force to the compartment located closest to the ceiling so that it is no longer ajar."
+    ]
+  },
+  "put the chocolate pudding to the right of the plate": {
+    "natural": [
+      "Move the chocolate pudding over to the right side of the plate.",
+      "Set the brown pudding down just to the right of that plate.",
+      "Can you slide the chocolate dessert next to the right edge of the plate?",
+      "Place the pudding on the right of the plate.",
+      "On the right-hand side of the plate, please put the chocolate pudding."
+    ],
+    "adversarial": [
+      "Would you be so kind as to relocate the cocoa-flavored dessert so that it rests immediately adjacent to the plate's rightmost edge?",
+      "Assuming the plate is your primary point of reference, position the chocolate pudding exactly on the rightward flank of it.",
+      "The chocolate pudding, which is currently occupying its original position, needs to be transferred to the space situated to the right of the plate.",
+      "Execute a spatial translation of the brown dairy treat, depositing it on a rightward vector relative to the plate.",
+      "It is strictly required that the chocolate pudding be situated by you such that the plate remains entirely to the left of the dessert."
+    ]
+  }
+}
