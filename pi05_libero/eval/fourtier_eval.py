@@ -67,7 +67,14 @@ SHARDS = {  # interleaved so no pod carries all the slow libero_90 failures
     "lb2x": [("libero_90", 79), ("libero_90", 2)],
     "lb3x": [("libero_90", 19), ("libero_90", 57), ("libero_90", 59)],
     "lb4x": [("libero_90", 60), ("libero_90", 82)],
+    # oracle-max (user 2026-08-26): the six under-searched mid-band l90 tasks
+    "om1": [("libero_90", 2), ("libero_90", 38), ("libero_90", 60)],
+    "om2": [("libero_90", 64), ("libero_90", 82), ("libero_90", 28)],
 }
+
+OMAX_SCREEN_INITS = list(range(10))        # 10-trial screens
+OMAX_CONFIRM_INITS = list(range(30, 50))   # 20-trial virgin confirms (confirm2 window)
+OMAX_BOARD, OMAX_KEEP, OMAX_ROUNDS = 24, 6, 6
 
 # Cross-scene pairs (user 2026-08-25): roll the NOVEL task's full phrase board
 # in the TRAINED scene that shares its canonical string. ttid None = look the
@@ -176,7 +183,7 @@ def main():
     p.add_argument("--skip-oracle", action="store_true")
     p.add_argument("--tasks", default="",
                    help="comma list suite:tid overriding the shard's task list, e.g. libero_90:31,libero_90:35")
-    p.add_argument("--phase", choices=["main", "deepen", "oracleplus", "cross"], default="main",
+    p.add_argument("--phase", choices=["main", "deepen", "oracleplus", "cross", "oraclemax"], default="main",
                    help="deepen = E1: extend orig/tier/confirm cells on virgin inits, no board search")
     args = p.parse_args()
 
@@ -398,6 +405,101 @@ def main():
                 print("  ORACLEPLUS confirm %d/10  %r" % (c, ph[:60]), flush=True)
             env.close()
             print("  ORACLEPLUS done %s/%d  [%.0fs]" % (suite_name, tid, time.time() - t_task), flush=True)
+            continue
+
+        if args.phase == "oraclemax":
+            # widest search: seed with tiers + every previously minted member,
+            # 10-trial screens, 6 kept, 6 rounds, pattern/register lenses,
+            # confirm top-4 + canonical at 20 trials on inits 30-49.
+            mkey = "%s/%d" % (suite_name, tid)
+            st = boards_state.setdefault("omax:" + mkey,
+                                         {"members": [], "rounds_done": 0})
+            prior = boards_state.get(mkey, {}).get("members", [])
+
+            def screen_score(ph):
+                return run_cell(env, init_states, suite_name, tid, canon, "screen", ph,
+                                OMAX_SCREEN_INITS, max_steps)
+
+            env.reset()
+            obs = env.set_init_state(init_states[0])
+            for _ in range(args.settle):
+                obs, _, _, _ = env.step(DUMMY)
+            try:
+                from PIL import Image
+                buf = io.BytesIO()
+                Image.fromarray(np.ascontiguousarray(obs["agentview_image"][::-1, ::-1])).save(buf, "PNG")
+                img_part = {"inline_data": {"mime_type": "image/png",
+                                            "data": base64.b64encode(buf.getvalue()).decode()}}
+            except Exception:
+                img_part = None
+
+            LENSES = [
+                "",
+                " This round: write in the exact register of LIBERO canonical instructions -- lowercase, plain imperative, 'put/pick up the X in/on the Y' templates, everyday vocabulary, no punctuation flourishes.",
+                " This round: apply patterns that won on other tasks -- rename each object by its VISIBLE color/material even if it contradicts the stated color (a 'black bowl' that renders grey becomes 'the grey bowl'); reference object state and side ('the open drawer on the left'); name the mechanism to act on.",
+                " This round: write the SIMPLEST, most direct imperatives possible -- plainest everyday words, minimum syllables.",
+                " This round: name every object by its visible appearance in the image (color, shape, place on the table), common household words.",
+                " This round: spell the action out explicitly -- which object, from where, to where -- one concrete motion per line, under 15 words.",
+            ]
+            seen = set()
+            board = []
+            for ph in [canon] + tiers["natural"] + tiers["adversarial"] + prior + st["members"]:
+                if ph.lower() not in seen:
+                    seen.add(ph.lower())
+                    board.append(ph)
+            if len(board) < OMAX_BOARD:
+                parts = ([img_part] if img_part else []) + [{"text": GEN_PROMPT.format(
+                    nominal=canon, k=len(OMAX_SCREEN_INITS),
+                    board="(no results yet -- first round)", n=OMAX_BOARD - len(board)) + LENSES[1]}]
+                try:
+                    newp = parse_lines(gemini("gemini-3.5-flash", parts, api_key), seen, OMAX_BOARD - len(board))
+                    board += newp
+                    st["members"] += newp
+                    json.dump(boards_state, open(boards_path, "w"), indent=1)
+                except Exception as e:
+                    print("  OMAX gen error r1: %s" % type(e).__name__, flush=True)
+            scored = {ph: screen_score(ph) for ph in board}
+            best_hist = [max(scored.values())]
+            rd = max(st["rounds_done"], 1)
+            while rd < OMAX_ROUNDS:
+                ranked = sorted(scored.items(), key=lambda x: -x[1])
+                if all(v == len(OMAX_SCREEN_INITS) for _, v in ranked[:OMAX_KEEP]):
+                    print("  OMAX r%d: top-%d saturated" % (rd, OMAX_KEEP), flush=True)
+                    break
+                lens = LENSES[rd % len(LENSES)]
+                btxt = "\n".join('%d. "%s"  %d/%d' % (i + 1, ph, v, len(OMAX_SCREEN_INITS))
+                                  for i, (ph, v) in enumerate(ranked[:10]))
+                parts = ([img_part] if img_part else []) + [{"text": GEN_PROMPT.format(
+                    nominal=canon, k=len(OMAX_SCREEN_INITS), board=btxt, n=12) + lens}]
+                try:
+                    newp = parse_lines(gemini("gemini-3.5-flash", parts, api_key), seen, 12)
+                except Exception as e:
+                    print("  OMAX gen error: %s" % type(e).__name__, flush=True)
+                    break
+                if not newp:
+                    break
+                st["members"] += newp
+                rd += 1
+                st["rounds_done"] = rd
+                json.dump(boards_state, open(boards_path, "w"), indent=1)
+                for ph in newp:
+                    scored[ph] = screen_score(ph)
+                best_hist.append(max(scored.values()))
+                print("  OMAX r%d: best %d/%d  %r" % (rd, best_hist[-1], len(OMAX_SCREEN_INITS),
+                                                      max(scored, key=scored.get)[:60]), flush=True)
+                if len(best_hist) >= 3 and best_hist[-1] - best_hist[-3] < 1:
+                    print("  OMAX converged (no gain over 2 rounds)", flush=True)
+                    break
+            json.dump(boards_state, open(boards_path, "w"), indent=1)
+            finalists = [ph for ph, _ in sorted(scored.items(), key=lambda x: -x[1])[:4]]
+            if canon not in finalists:
+                finalists.append(canon)
+            for ph in finalists:
+                c = run_cell(env, init_states, suite_name, tid, canon, "confirmmax", ph,
+                             OMAX_CONFIRM_INITS, max_steps)
+                print("  OMAX confirm %d/%d  %r" % (c, len(OMAX_CONFIRM_INITS), ph[:60]), flush=True)
+            env.close()
+            print("  OMAX done %s/%d  [%.0fs]" % (suite_name, tid, time.time() - t_task), flush=True)
             continue
 
         # ---- 1. tiers -------------------------------------------------------
